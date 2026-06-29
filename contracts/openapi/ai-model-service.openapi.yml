@@ -1,0 +1,207 @@
+openapi: 3.0.3
+info:
+  title: AI Model Service
+  version: 1.0.0
+  description: Predicts Health Insurance expected risk cost for Pricing Service.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service status
+  /health/pricing/metadata:
+    get:
+      summary: Get active model metadata
+      responses:
+        "200":
+          description: Active model metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelMetadataResponse"
+  /health/pricing/predict:
+    post:
+      summary: Predict expected risk cost for Health Insurance
+      description: >
+        AI Model Service predicts expectedRiskCost only. It must not receive
+        basePremium and must not calculate finalPremium.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthPricingPredictionRequest"
+      responses:
+        "200":
+          description: Expected risk cost prediction and explanation payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthPricingPredictionResponse"
+components:
+  schemas:
+    HealthRiskProfile:
+      type: object
+      required:
+        - age
+        - sex
+        - bmi
+        - smoker
+        - region
+        - bloodPressure
+        - exerciseFrequency
+        - preExistingCondition
+        - occupationRisk
+        - annualIncome
+      properties:
+        age:
+          type: number
+          minimum: 0
+          maximum: 120
+        sex:
+          type: string
+          enum: [male, female]
+        bmi:
+          type: number
+          minimum: 10
+          maximum: 80
+        children:
+          type: integer
+          minimum: 0
+          default: 0
+        smoker:
+          type: string
+          enum: [yes, no]
+        region:
+          type: string
+        bloodPressure:
+          type: number
+          minimum: 70
+          maximum: 220
+        exerciseFrequency:
+          type: string
+        preExistingCondition:
+          type: boolean
+        occupationRisk:
+          type: string
+          enum: [low, moderate, high]
+        annualIncome:
+          type: number
+          minimum: 0
+    HistoricalExperienceFeatures:
+      type: object
+      required:
+        - pastClaimCount
+        - totalPastClaimAmount
+      properties:
+        pastClaimCount:
+          type: integer
+          minimum: 0
+          description: Synthetic MVP/demo feature or future feature-store value.
+        totalPastClaimAmount:
+          type: number
+          minimum: 0
+          description: Synthetic MVP/demo feature or future feature-store value.
+    HealthPricingPredictionRequest:
+      type: object
+      required:
+        - productType
+        - riskProfile
+        - historicalExperienceFeatures
+      properties:
+        productType:
+          type: string
+          enum: [HEALTH]
+        riskProfile:
+          $ref: "#/components/schemas/HealthRiskProfile"
+        historicalExperienceFeatures:
+          $ref: "#/components/schemas/HistoricalExperienceFeatures"
+    ExplanationItem:
+      type: object
+      properties:
+        feature:
+          type: string
+        sourceFeature:
+          type: string
+        value:
+          type: number
+        impact:
+          type: number
+        direction:
+          type: string
+          enum: [increase, decrease, neutral]
+        reason:
+          type: string
+        approximate:
+          type: boolean
+    PricingExplanationPayload:
+      type: object
+      required:
+        - topRiskFactors
+        - shapValues
+        - method
+        - generatedAt
+      properties:
+        topRiskFactors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExplanationItem"
+        shapValues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExplanationItem"
+        method:
+          type: string
+          description: SHAP when available, otherwise fallback explanation method.
+        generatedAt:
+          type: string
+          format: date-time
+    HealthPricingPredictionResponse:
+      type: object
+      required:
+        - modelVersion
+        - expectedRiskCost
+        - averageExpectedRiskCost
+        - rawRiskFactor
+        - riskFactor
+        - riskLevel
+        - explanation
+      properties:
+        modelVersion:
+          type: string
+        expectedRiskCost:
+          type: number
+          description: AI-predicted expected risk cost, not final premium.
+        averageExpectedRiskCost:
+          type: number
+        rawRiskFactor:
+          type: number
+        riskFactor:
+          type: number
+          minimum: 0.7
+          maximum: 2.5
+        riskLevel:
+          type: string
+          enum: [LOW, MODERATE, HIGH]
+        explanation:
+          $ref: "#/components/schemas/PricingExplanationPayload"
+    ModelMetadataResponse:
+      type: object
+      required:
+        - modelVersion
+        - featureList
+        - noBasePremiumInModel
+      properties:
+        modelVersion:
+          type: string
+        selectedModel:
+          type: string
+        trainingDate:
+          type: string
+        featureList:
+          type: array
+          items:
+            type: string
+        noBasePremiumInModel:
+          type: boolean
