@@ -1,0 +1,86 @@
+services:
+  mlflow-postgres:
+    image: postgres:16-alpine
+    container_name: dynamic-insurance-mlflow-postgres
+    environment:
+      POSTGRES_DB: ${MLFLOW_POSTGRES_DB:-mlflow}
+      POSTGRES_USER: ${MLFLOW_POSTGRES_USER:-mlflow}
+      POSTGRES_PASSWORD: ${MLFLOW_POSTGRES_PASSWORD:-mlflow}
+    ports:
+      - "${MLFLOW_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - mlflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${MLFLOW_POSTGRES_USER:-mlflow} -d ${MLFLOW_POSTGRES_DB:-mlflow}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mlflow-minio:
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    container_name: dynamic-insurance-mlflow-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MLFLOW_S3_ACCESS_KEY_ID:-mlflow}
+      MINIO_ROOT_PASSWORD: ${MLFLOW_S3_SECRET_ACCESS_KEY:-mlflow-secret}
+    ports:
+      - "${MLFLOW_MINIO_API_PORT:-19000}:9000"
+      - "${MLFLOW_MINIO_CONSOLE_PORT:-19001}:9001"
+    volumes:
+      - mlflow_minio_data:/data
+    restart: unless-stopped
+
+  mlflow-minio-init:
+    image: minio/mc:RELEASE.2025-01-17T23-25-50Z
+    container_name: dynamic-insurance-mlflow-minio-init
+    depends_on:
+      - mlflow-minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://mlflow-minio:9000 ${MLFLOW_S3_ACCESS_KEY_ID:-mlflow} ${MLFLOW_S3_SECRET_ACCESS_KEY:-mlflow-secret}; do
+        echo 'Waiting for MinIO...';
+        sleep 2;
+      done;
+      mc mb --ignore-existing local/${MLFLOW_S3_BUCKET:-mlflow-artifacts};
+      mc anonymous set none local/${MLFLOW_S3_BUCKET:-mlflow-artifacts};
+      "
+    restart: "no"
+
+  mlflow-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dynamic-insurance-mlflow-server
+    depends_on:
+      mlflow-postgres:
+        condition: service_healthy
+      mlflow-minio-init:
+        condition: service_completed_successfully
+    environment:
+      AWS_ACCESS_KEY_ID: ${MLFLOW_S3_ACCESS_KEY_ID:-mlflow}
+      AWS_SECRET_ACCESS_KEY: ${MLFLOW_S3_SECRET_ACCESS_KEY:-mlflow-secret}
+      MLFLOW_S3_ENDPOINT_URL: http://mlflow-minio:9000
+    ports:
+      - "${MLFLOW_TRACKING_PORT:-15000}:5000"
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - postgresql://${MLFLOW_POSTGRES_USER:-mlflow}:${MLFLOW_POSTGRES_PASSWORD:-mlflow}@mlflow-postgres:5432/${MLFLOW_POSTGRES_DB:-mlflow}
+      - --artifacts-destination
+      - s3://${MLFLOW_S3_BUCKET:-mlflow-artifacts}
+      - --serve-artifacts
+    restart: unless-stopped
+
+volumes:
+  mlflow_postgres_data:
+  mlflow_minio_data:
