@@ -38,11 +38,11 @@ public class AuthUser {
 
     @Column(name = "email_verified", nullable = false)
     @Builder.Default
-    private Boolean emailVerified = false;
+    private Boolean emailVerified = true;
 
     @Column(name = "phone_verified", nullable = false)
     @Builder.Default
-    private Boolean phoneVerified = false;
+    private Boolean phoneVerified = true;
 
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
