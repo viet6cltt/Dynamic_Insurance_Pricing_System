@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - Dynamic Insurance Pricing System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --color-pale-canvas: #090d16;
+        --color-deep-forest: #e2e8f0;
+        --color-foudre-pink: #38bdf8;
+        --color-ash-whisper: #1e293b;
+        --color-bubblegum-blush: #0ea5e9;
+        --color-slate-tint: #475569;
+        --font-ui: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+        --font-display: "Outfit", ui-sans-serif, system-ui, -apple-system, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--color-deep-forest);
+        font-family: var(--font-ui);
+        background: radial-gradient(
+            circle at 14% 24%,
+            rgba(14, 165, 233, 0.15) 0,
+            rgba(14, 165, 233, 0) 40%
+          ),
+          radial-gradient(
+            circle at 84% 14%,
+            rgba(56, 189, 248, 0.1) 0,
+            rgba(56, 189, 248, 0) 45%
+          ),
+          var(--color-pale-canvas);
+      }
+
+      .page-shell {
+        width: min(1120px, calc(100% - 48px));
+        margin: 0 auto;
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 1fr 420px;
+        align-items: center;
+        gap: 60px;
+        padding: 40px 0;
+      }
+
+      .hero-block {
+        position: relative;
+        padding: 32px 0;
+      }
+
+      .hero-ghost {
+        position: absolute;
+        top: -36px;
+        left: 0;
+        font-family: var(--font-display);
+        font-size: clamp(88px, 16vw, 180px);
+        font-weight: 800;
+        line-height: 0.7;
+        color: rgba(56, 189, 248, 0.05);
+        pointer-events: none;
+        user-select: none;
+      }
+
+      .hero-heart {
+        width: 74px;
+        height: 74px;
+        border-radius: 20px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, var(--color-bubblegum-blush), var(--color-foudre-pink));
+        color: #090d16;
+        font-size: 32px;
+        box-shadow: 0 8px 30px rgba(14, 165, 233, 0.3);
+      }
+
+      .hero-title {
+        margin: 24px 0 0;
+        font-family: var(--font-display);
+        font-size: clamp(54px, 8vw, 88px);
+        font-weight: 800;
+        line-height: 0.85;
+        letter-spacing: -1px;
+        background: linear-gradient(to right, #ffffff, #94a3b8);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .hero-sub {
+        margin: 18px 0 0;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--color-foudre-pink);
+      }
+
+      .hero-text {
+        margin: 12px 0 0;
+        font-size: 16px;
+        color: #94a3b8;
+        line-height: 1.6;
+      }
+
+      .login-card {
+        position: relative;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 24px;
+        padding: 38px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+      }
+
+      .login-card::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border-radius: 24px;
+        padding: 1px;
+        background: linear-gradient(to bottom, rgba(56, 189, 248, 0.2), transparent);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        pointer-events: none;
+      }
+
+      .title {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: 42px;
+        font-weight: 700;
+        line-height: 1;
+        color: #ffffff;
+        text-align: center;
+      }
+
+      .subtitle {
+        margin-top: 10px;
+        text-align: center;
+        color: #94a3b8;
+        font-size: 14px;
+      }
+
+      .form-alert {
+        margin-top: 18px;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: 10px;
+        background: rgba(239, 68, 68, 0.1);
+        color: #fca5a5;
+        padding: 12px 14px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.25;
+        animation: toast-in 0.18s ease-out;
+      }
+
+      .form-alert i {
+        color: #ef4444;
+        margin-top: 1px;
+      }
+
+      .form-alert.is-hiding {
+        animation: toast-out 0.22s ease-in forwards;
+      }
+
+      @keyframes toast-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes toast-out {
+        to {
+          opacity: 0;
+        }
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 8px;
+        color: #cbd5e1;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .input {
+        width: 100%;
+        height: 46px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.8);
+        padding: 0 14px;
+        color: #ffffff;
+        font-size: 14px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .input::placeholder {
+        color: #475569;
+      }
+
+      .input:focus {
+        outline: none;
+        border-color: var(--color-foudre-pink);
+        box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+      }
+
+      .pw-toggle {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: 0;
+        background: transparent;
+        color: #475569;
+        cursor: pointer;
+        transition: color 0.2s;
+      }
+
+      .pw-toggle:hover {
+        color: #94a3b8;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 8px;
+      }
+
+      .row-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #94a3b8;
+      }
+
+      .help-link {
+        color: var(--color-foudre-pink);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .help-link:hover {
+        color: #ffffff;
+      }
+
+      .btn-primary {
+        margin-top: 18px;
+        width: 100%;
+        height: 46px;
+        border: 0;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--color-bubblegum-blush), var(--color-foudre-pink));
+        color: #090d16;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+        box-shadow: 0 4px 15px rgba(14, 165, 233, 0.2);
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        opacity: 0.95;
+      }
+
+      .divider {
+        margin: 18px 0;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        color: #475569;
+        font-size: 12px;
+      }
+
+      .divider::before,
+      .divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .btn-google {
+        width: 100%;
+        height: 42px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 23, 42, 0.6);
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: border-color 0.2s ease, background 0.2s ease;
+      }
+
+      .btn-google:hover {
+        border-color: var(--color-foudre-pink);
+        background: rgba(15, 23, 42, 0.8);
+      }
+
+      .footer-text {
+        margin-top: 16px;
+        text-align: center;
+        font-size: 14px;
+        color: #94a3b8;
+      }
+
+      .footer-text a {
+        color: var(--color-foudre-pink);
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .footer-text a:hover {
+        color: #ffffff;
+      }
+
+      .back-wrap {
+        text-align: center;
+        margin-top: 12px;
+      }
+
+      .back-home {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #475569;
+        text-decoration: none;
+        font-size: 13px;
+        transition: color 0.2s;
+      }
+
+      .back-home:hover {
+        color: #94a3b8;
+      }
+
+      @media (max-width: 980px) {
+        .page-shell {
+          grid-template-columns: 1fr;
+          gap: 26px;
+          width: min(560px, calc(100% - 28px));
+          padding: 24px 0 28px;
+        }
+
+        .hero-block {
+          text-align: center;
+          padding: 14px 0 0;
+        }
+
+        .hero-heart {
+          margin: 0 auto;
+        }
+
+        .hero-title {
+          font-size: clamp(48px, 15vw, 68px);
+        }
+
+        .hero-sub {
+          font-size: 22px;
+        }
+
+        .hero-ghost {
+          left: 50%;
+          transform: translateX(-50%);
+          font-size: clamp(74px, 30vw, 118px);
+        }
+
+        .login-card {
+          padding: 30px 20px;
+        }
+      }
+    </style>
+    <script>
+      function togglePassword() {
+        const passwordInput = document.getElementById("password");
+        const eyeIcon = document.getElementById("eyeIcon");
+
+        if (passwordInput.type === "password") {
+          passwordInput.type = "text";
+          eyeIcon.classList.remove("fa-eye");
+          eyeIcon.classList.add("fa-eye-slash");
+        } else {
+          passwordInput.type = "password";
+          eyeIcon.classList.remove("fa-eye-slash");
+          eyeIcon.classList.add("fa-eye");
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        let alertTimer;
+
+        function hideAlert(alert) {
+          if (!alert) return;
+          alert.classList.add("is-hiding");
+          window.setTimeout(function () {
+            alert.remove();
+          }, 240);
+        }
+
+        function scheduleAlertHide(alert) {
+          window.clearTimeout(alertTimer);
+          alertTimer = window.setTimeout(function () {
+            hideAlert(alert);
+          }, 3600);
+        }
+
+        function showLoginAlert(message) {
+          const card = document.querySelector(".login-card");
+          const subtitle = document.querySelector(".subtitle");
+          if (!card || !subtitle) return;
+
+          let alert = document.querySelector("[data-login-alert]");
+          if (!alert) {
+            alert = document.createElement("div");
+            alert.setAttribute("data-login-alert", "");
+            alert.setAttribute("role", "alert");
+            alert.className = "form-alert";
+            alert.innerHTML =
+              '<i class="fas fa-circle-exclamation"></i><span></span>';
+            subtitle.insertAdjacentElement("afterend", alert);
+          }
+
+          alert.classList.remove("is-hiding");
+          alert.querySelector("span").textContent = message;
+          scheduleAlertHide(alert);
+        }
+
+        const initialAlert = document.querySelector("[data-login-alert]");
+        if (initialAlert) {
+          scheduleAlertHide(initialAlert);
+        }
+
+        const loginForm = document.querySelector("[data-login-form]");
+        if (!loginForm) return;
+
+        loginForm.addEventListener("submit", async function (event) {
+          if (!loginForm.checkValidity()) return;
+
+          event.preventDefault();
+
+          const submitButton = loginForm.querySelector('[type="submit"]');
+          if (submitButton) submitButton.disabled = true;
+
+          try {
+            const loginCheckResponse = await fetch("/api/v1/users/login", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              credentials: "same-origin",
+              body: JSON.stringify({
+                username: loginForm.username.value,
+                password: loginForm.password.value,
+              }),
+            });
+
+            if (!loginCheckResponse.ok) {
+              showLoginAlert(
+                "Login failed. Please check your username and password."
+              );
+              return;
+            }
+
+            HTMLFormElement.prototype.submit.call(loginForm);
+          } catch (error) {
+            showLoginAlert("Login failed. Please try again.");
+          } finally {
+            if (submitButton) submitButton.disabled = false;
+          }
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero-block">
+        <div class="hero-ghost">INSURE</div>
+        <div class="hero-heart">
+          <i class="fas fa-shield-halved"></i>
+        </div>
+        <h1 class="hero-title">InsuPricing</h1>
+        <p class="hero-sub">Dynamic Pricing Engine</p>
+        <p class="hero-text">Smart coverage, customized rates. Experience the future of personalized risk modeling and premium calculation.</p>
+      </section>
+
+      <section class="login-card">
+        <h2 class="title">Sign In</h2>
+        <p class="subtitle">Access the pricing control center</p>
+
+        <div
+          th:if="${param.error}"
+          data-login-alert
+          class="form-alert"
+          role="alert"
+        >
+          <i class="fas fa-circle-exclamation"></i>
+          <span>Login failed. Please check your username and password.</span>
+        </div>
+
+        <form th:action="@{/login}" method="post" data-login-form>
+          <input
+            type="hidden"
+            th:name="${_csrf.parameterName}"
+            th:value="${_csrf.token}"
+          />
+
+          <div style="margin-top: 22px;">
+            <label for="username" class="label">Username</label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              required
+              placeholder="Enter your username"
+              class="input"
+            />
+          </div>
+
+          <div style="margin-top: 16px;">
+            <label for="password" class="label">Password</label>
+            <div class="relative">
+              <input
+                type="password"
+                id="password"
+                name="password"
+                required
+                placeholder="Enter your password"
+                class="input"
+                style="padding-right: 44px;"
+              />
+              <button
+                type="button"
+                onclick="togglePassword()"
+                class="pw-toggle"
+                aria-label="Toggle password visibility"
+              >
+                <i id="eyeIcon" class="fas fa-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <input
+                type="checkbox"
+                id="remember"
+                name="remember-me"
+                style="accent-color: var(--color-foudre-pink);"
+              />
+              <label for="remember">Remember me</label>
+            </div>
+            <a href="#" class="help-link">Forgot password?</a>
+          </div>
+
+          <button type="submit" class="btn-primary">Sign In</button>
+
+          <div class="divider">Or login with</div>
+
+          <a
+            th:href="${googleAuthUrl}"
+            class="btn-google"
+          >
+            <svg class="w-6 h-6" viewBox="0 0 48 48">
+              <path
+                fill="#EA4335"
+                d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+              />
+              <path
+                fill="#4285F4"
+                d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+              />
+              <path
+                fill="#34A853"
+                d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+              />
+              <path fill="none" d="M0 0h48v48H0z" />
+            </svg>
+            <span>Continue with Google</span>
+          </a>
+
+          <div class="footer-text">
+            <p>
+              Don't have an account?
+              <a th:href="${signupUrl}">Register</a>
+            </p>
+          </div>
+
+          <div class="back-wrap">
+            <a th:href="${clientAppUri}" class="back-home">
+              <i class="fas fa-home"></i>
+              <span>Back to home</span>
+            </a>
+          </div>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>
