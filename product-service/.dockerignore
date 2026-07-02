@@ -1,0 +1,10 @@
+target/
+pom.xml.releaseBackup
+release.properties
+dependency-reduced-pom.xml
+.mvn/
+mvnw
+mvnw.cmd
+.git
+.gitignore
+.env
