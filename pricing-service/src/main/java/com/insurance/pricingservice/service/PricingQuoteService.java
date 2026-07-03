@@ -248,7 +248,7 @@ public class PricingQuoteService {
                 .portfolioModelVersion(portfolioModelVersion)
                 .healthModelVersion(healthModelVersion)
                 .pricingRuleVersion("v1.0")
-                .status("GENERATED".equals(predictionStatus) ? "GENERATED" : "FAILED")
+                .status("SUCCESS".equals(predictionStatus) ? "GENERATED" : "FAILED")
                 .expiredAt(expiredAt)
                 .build();
 
@@ -337,10 +337,20 @@ public class PricingQuoteService {
         return mapToResponse(saved, explanation);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = IllegalStateException.class)
     public QuoteResponse markQuoteUsed(UUID quoteId) {
         PremiumQuote quote = quoteRepository.findById(quoteId)
                 .orElseThrow(() -> new IllegalArgumentException("Premium quote not found with ID: " + quoteId));
+
+        if (quote.getExpiredAt().isBefore(Instant.now())) {
+            quote.setStatus("EXPIRED");
+            quoteRepository.save(quote);
+            throw new IllegalStateException("Quote has expired");
+        }
+
+        if (!"GENERATED".equals(quote.getStatus()) && !"ACCEPTED".equals(quote.getStatus())) {
+            throw new IllegalStateException("Quote cannot be marked as used as status is: " + quote.getStatus());
+        }
 
         quote.setStatus("USED");
         PremiumQuote saved = quoteRepository.save(quote);

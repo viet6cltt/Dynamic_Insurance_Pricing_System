@@ -2,9 +2,15 @@ package com.insurance.pricingservice;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.insurance.pricingservice.model.PremiumQuote;
+import com.insurance.pricingservice.repository.PremiumQuoteRepository;
+import com.insurance.pricingservice.repository.PricingAuditLogRepository;
+import com.insurance.pricingservice.repository.PricingExplanationRepository;
+import com.insurance.pricingservice.repository.PricingInputSnapshotRepository;
 import com.insurance.pricingservice.service.AiModelServiceClient;
 import com.insurance.pricingservice.service.ApplicationPolicyServiceClient;
 import com.insurance.pricingservice.service.ProductServiceClient;
+import com.insurance.pricingservice.service.PricingQuoteService;
 import com.insurance.pricingservice.service.UserServiceClient;
 import com.insurance.pricingservice.dto.*;
 import com.insurance.pricingservice.dto.CreateQuoteRequest;
@@ -12,6 +18,7 @@ import com.insurance.pricingservice.dto.InternalCoveragePlanResponse;
 import com.insurance.pricingservice.dto.InsuredPersonResponse;
 import com.insurance.pricingservice.dto.UserProfileResponse;
 import com.insurance.pricingservice.dto.ClaimHistorySummaryResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,8 +29,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,6 +47,21 @@ public class PricingQuoteControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private PricingQuoteService pricingQuoteService;
+
+    @Autowired
+    private PremiumQuoteRepository quoteRepository;
+
+    @Autowired
+    private PricingInputSnapshotRepository snapshotRepository;
+
+    @Autowired
+    private PricingExplanationRepository explanationRepository;
+
+    @Autowired
+    private PricingAuditLogRepository auditLogRepository;
+
     @MockBean
     private UserServiceClient userServiceClient;
 
@@ -49,6 +73,14 @@ public class PricingQuoteControllerTest {
 
     @MockBean
     private AiModelServiceClient aiModelServiceClient;
+
+    @BeforeEach
+    void cleanDatabase() {
+        auditLogRepository.deleteAll();
+        explanationRepository.deleteAll();
+        snapshotRepository.deleteAll();
+        quoteRepository.deleteAll();
+    }
 
     @Test
     public void testCreateQuoteSuccess() throws Exception {
@@ -133,5 +165,59 @@ public class PricingQuoteControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andDo(print())
                 .andExpect(status().isCreated());
+
+        PremiumQuote savedQuote = quoteRepository.findAll().getFirst();
+        assertEquals("GENERATED", savedQuote.getStatus());
+    }
+
+    @Test
+    public void testMarkQuoteUsedRejectsExpiredQuote() {
+        PremiumQuote quote = quoteRepository.save(quote("GENERATED", Instant.now().minusSeconds(60)));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> pricingQuoteService.markQuoteUsed(quote.getQuoteId()));
+
+        assertEquals("Quote has expired", exception.getMessage());
+        assertEquals("EXPIRED", quoteRepository.findById(quote.getQuoteId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    public void testMarkQuoteUsedRejectsAlreadyUsedQuote() {
+        PremiumQuote quote = quoteRepository.save(quote("USED", Instant.now().plusSeconds(3600)));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> pricingQuoteService.markQuoteUsed(quote.getQuoteId()));
+
+        assertTrue(exception.getMessage().contains("Quote cannot be marked as used"));
+        assertEquals("USED", quoteRepository.findById(quote.getQuoteId()).orElseThrow().getStatus());
+    }
+
+    private PremiumQuote quote(String status, Instant expiredAt) {
+        return PremiumQuote.builder()
+                .buyerUserId(UUID.randomUUID())
+                .insuredPersonId(UUID.randomUUID())
+                .productId(UUID.randomUUID())
+                .coveragePlanId(UUID.randomUUID())
+                .productType("HEALTH")
+                .planName("Standard Gold Plan")
+                .basePremium(new BigDecimal("2500000.00"))
+                .sumInsured(new BigDecimal("150000000.00"))
+                .predictedAnnualClaimCost(BigDecimal.ZERO)
+                .predictedHealthCost(BigDecimal.ZERO)
+                .baselineHealthCost(BigDecimal.ZERO)
+                .rawPortfolioRiskFactor(BigDecimal.ONE)
+                .portfolioRiskFactor(BigDecimal.ONE)
+                .rawHealthRiskFactor(BigDecimal.ONE)
+                .healthRiskFactor(BigDecimal.ONE)
+                .underwritingAdjustmentFactor(BigDecimal.ONE)
+                .businessAdjustmentFactor(BigDecimal.ONE)
+                .finalPremium(new BigDecimal("2500000.00"))
+                .riskLevel("STANDARD")
+                .portfolioModelVersion("test")
+                .healthModelVersion("test")
+                .pricingRuleVersion("v1.0")
+                .status(status)
+                .expiredAt(expiredAt)
+                .build();
     }
 }
