@@ -1,0 +1,18 @@
+package com.insurance.pricingservice.dto;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
+
+public record ValidateQuoteResponse(
+    boolean valid,
+    UUID quoteId,
+    UUID buyerUserId,
+    UUID insuredPersonId,
+    UUID productId,
+    UUID coveragePlanId,
+    BigDecimal basePremium,
+    BigDecimal finalPremium,
+    String status,
+    Instant expiredAt
+) {}
