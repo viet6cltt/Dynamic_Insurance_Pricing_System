@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: application-policy-service-test
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  kafka:
+    bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: false
+  task:
+    scheduling:
+      enabled: false
+
+eureka:
+  client:
+    enabled: false
+
+app:
+  services:
+    pricing-service-url: http://localhost:8083
+    payment-service-url: http://localhost:8085
+  kafka:
+    topics:
+      payment-events: payment.events
+      policy-events: policy.events
+    consumer-groups:
+      payment-events: policy-service-payment-group
+  outbox:
+    poll-delay-ms: 1000
+    batch-size: 50
+    max-retries: 5
