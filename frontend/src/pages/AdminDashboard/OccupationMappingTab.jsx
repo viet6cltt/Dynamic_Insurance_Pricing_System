@@ -4,6 +4,7 @@ import {
   AlertCircle, Search, Filter
 } from "lucide-react";
 import { adminService } from "../../services/adminService";
+import Pagination from "../../components/Pagination";
 
 const RISK_LEVELS = ["LOW", "MODERATE", "HIGH"];
 
@@ -20,6 +21,7 @@ const RISK_LEVEL_LABEL = {
 };
 
 const EMPTY_FORM = { occupationCode: "", occupationName: "", riskLevel: "LOW", status: "ACTIVE" };
+const DEFAULT_PAGE_SIZE = 10;
 
 export default function OccupationMappingTab({ products, triggerToast }) {
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.productId || "");
@@ -27,6 +29,10 @@ export default function OccupationMappingTab({ products, triggerToast }) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState(null);
@@ -55,6 +61,9 @@ export default function OccupationMappingTab({ products, triggerToast }) {
       setSelectedProductId(products[0].productId);
     }
   }, [products]);
+
+  // Reset về trang 1 khi search/filter/product thay đổi
+  useEffect(() => { setCurrentPage(1); }, [search, filterStatus, selectedProductId]);
 
   const openCreate = () => {
     setEditingMapping(null);
@@ -118,6 +127,11 @@ export default function OccupationMappingTab({ products, triggerToast }) {
     return matchSearch && matchStatus;
   });
 
+  // Paginated slice
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   const stats = {
     total: mappings.length,
     active: mappings.filter(m => m.status === "ACTIVE").length,
@@ -173,7 +187,7 @@ export default function OccupationMappingTab({ products, triggerToast }) {
 
       {/* Stats Summary */}
       {!loading && mappings.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm text-center">
             <p className="text-xs font-semibold text-gray-400 uppercase">Tổng</p>
             <p className="text-2xl font-extrabold text-gray-900 mt-1">{stats.total}</p>
@@ -259,7 +273,7 @@ export default function OccupationMappingTab({ products, triggerToast }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map((m) => (
+                {paginated.map((m) => (
                   <tr key={m.mappingId} className="hover:bg-gray-50/30 transition-colors">
                     <td className="py-4 px-6">
                       <code className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-md font-mono">
@@ -301,9 +315,16 @@ export default function OccupationMappingTab({ products, triggerToast }) {
               </tbody>
             </table>
           </div>
-          <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
-            Hiển thị {filtered.length} / {mappings.length} bản ghi
-          </div>
+
+          {/* Pagination */}
+          <Pagination
+            currentPage={safePage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            totalItems={filtered.length}
+          />
         </div>
       )}
 
@@ -350,7 +371,7 @@ export default function OccupationMappingTab({ products, triggerToast }) {
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
                   Mức độ rủi ro
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {RISK_LEVELS.map(lvl => (
                     <button
                       key={lvl}

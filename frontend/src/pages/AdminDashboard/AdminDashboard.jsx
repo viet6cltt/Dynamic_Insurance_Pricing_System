@@ -4,6 +4,7 @@ import { useAuthStore } from "../../store/authStore";
 import { adminService } from "../../services/adminService";
 import RiskSchemaTab from "./RiskSchemaTab";
 import OccupationMappingTab from "./OccupationMappingTab";
+import Pagination from "../../components/Pagination";
 import {
   LayoutDashboard,
   Shield,
@@ -76,6 +77,14 @@ export default function AdminDashboard() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
+  // --- Pagination: Products ---
+  const [productPage, setProductPage] = useState(1);
+  const [productPageSize, setProductPageSize] = useState(10);
+
+  // --- Pagination: Coverage Plans ---
+  const [planPage, setPlanPage] = useState(1);
+  const [planPageSize, setPlanPageSize] = useState(10);
+
   // --- Product Modals & Forms ---
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null); // null means "Create New"
@@ -144,6 +153,10 @@ export default function AdminDashboard() {
       fetchCoveragePlans(selectedProductId);
     }
   }, [activeTab, selectedProductId]);
+
+  // Reset trang khi chuyển tab hoặc thay đổi product
+  useEffect(() => { setProductPage(1); }, [activeTab]);
+  useEffect(() => { setPlanPage(1); }, [selectedProductId, activeTab]);
 
   const triggerToast = (msg, isError = false) => {
     if (isError) {
@@ -498,7 +511,11 @@ export default function AdminDashboard() {
                 <div className="py-20 text-center text-gray-400 space-y-4 bg-white rounded-2xl border border-gray-100">
                   <p className="text-sm">Chưa có sản phẩm bảo hiểm nào được khai báo.</p>
                 </div>
-              ) : (
+              ) : (() => {
+                const totalProductPages = Math.max(1, Math.ceil(products.length / productPageSize));
+                const safeProductPage = Math.min(productPage, totalProductPages);
+                const paginatedProducts = products.slice((safeProductPage - 1) * productPageSize, safeProductPage * productPageSize);
+                return (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left text-sm">
@@ -512,10 +529,8 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {products.map((p) => (
+                        {paginatedProducts.map((p) => (
                           <tr key={p.productId} className="hover:bg-gray-50/20 transition-colors">
-                            
-                            {/* Product Image Preview */}
                             <td className="py-4 px-6">
                               <div className="w-16 h-12 bg-gray-100 border border-gray-200 rounded-lg overflow-hidden flex items-center justify-center">
                                 {p.imageUrl ? (
@@ -525,22 +540,16 @@ export default function AdminDashboard() {
                                 )}
                               </div>
                             </td>
-
-                            {/* Product Name & Description */}
                             <td className="py-4 px-6 max-w-xs">
                               <h4 className="font-bold text-gray-900 text-sm">{p.name}</h4>
                               <p className="text-xs text-gray-400 mt-1 line-clamp-2">{p.description || "Chưa có mô tả chi tiết."}</p>
                               <span className="text-[10px] text-gray-400 font-mono block mt-1">ID: {p.productId}</span>
                             </td>
-
-                            {/* Product Type */}
                             <td className="py-4 px-6">
                               <span className="px-2.5 py-1 bg-gray-150 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200">
                                 {getProductTypeLabel(p.productType)}
                               </span>
                             </td>
-
-                            {/* Status */}
                             <td className="py-4 px-6">
                               <button
                                 onClick={() => handleToggleProductStatus(p)}
@@ -553,8 +562,6 @@ export default function AdminDashboard() {
                                 {p.status === "ACTIVE" ? "ĐANG BÁN" : "TẠM ẨN"}
                               </button>
                             </td>
-
-                            {/* Actions */}
                             <td className="py-4 px-6 text-right">
                               <button
                                 onClick={() => handleOpenProductEdit(p)}
@@ -565,14 +572,22 @@ export default function AdminDashboard() {
                                 <span className="text-xs font-bold">Sửa</span>
                               </button>
                             </td>
-
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  <Pagination
+                    currentPage={safeProductPage}
+                    totalPages={totalProductPages}
+                    onPageChange={setProductPage}
+                    pageSize={productPageSize}
+                    onPageSizeChange={setProductPageSize}
+                    totalItems={products.length}
+                  />
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -641,7 +656,11 @@ export default function AdminDashboard() {
                     Thêm kế hoạch đầu tiên
                   </button>
                 </div>
-              ) : (
+              ) : (() => {
+                const totalPlanPages = Math.max(1, Math.ceil(plans.length / planPageSize));
+                const safePlanPage = Math.min(planPage, totalPlanPages);
+                const paginatedPlans = plans.slice((safePlanPage - 1) * planPageSize, safePlanPage * planPageSize);
+                return (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left text-sm">
@@ -656,26 +675,16 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {plans.map((pl) => (
+                        {paginatedPlans.map((pl) => (
                           <tr key={pl.coveragePlanId} className="hover:bg-gray-50/20 transition-colors">
-                            
-                            {/* Plan Name */}
                             <td className="py-4 px-6 font-bold text-gray-900">{pl.planName}</td>
-                            
-                            {/* Description */}
                             <td className="py-4 px-6 text-xs text-gray-500 max-w-xs">{pl.description || "Không có mô tả."}</td>
-                            
-                            {/* Base Premium */}
                             <td className="py-4 px-6 font-bold text-blue-600">
                               {(pl.basePremium || 0).toLocaleString("vi-VN")}đ
                             </td>
-
-                            {/* Sum Insured */}
                             <td className="py-4 px-6 font-bold text-gray-900">
                               {(pl.sumInsured || 0).toLocaleString("vi-VN")}đ
                             </td>
-
-                            {/* Status */}
                             <td className="py-4 px-6">
                               <button
                                 onClick={() => handleTogglePlanStatus(pl)}
@@ -688,8 +697,6 @@ export default function AdminDashboard() {
                                 {pl.status === "ACTIVE" ? "ĐANG ÁP DỤNG" : "TẠM DỪNG"}
                               </button>
                             </td>
-
-                            {/* Actions */}
                             <td className="py-4 px-6 text-right">
                               <button
                                 onClick={() => handleOpenPlanEdit(pl)}
@@ -699,14 +706,22 @@ export default function AdminDashboard() {
                                 <span className="text-xs font-bold">Sửa</span>
                               </button>
                             </td>
-
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  <Pagination
+                    currentPage={safePlanPage}
+                    totalPages={totalPlanPages}
+                    onPageChange={setPlanPage}
+                    pageSize={planPageSize}
+                    onPageSizeChange={setPlanPageSize}
+                    totalItems={plans.length}
+                  />
                 </div>
-              )}
+                );
+              })()}
 
             </div>
           )}
