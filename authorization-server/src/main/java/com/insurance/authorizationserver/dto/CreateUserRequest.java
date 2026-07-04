@@ -12,7 +12,6 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Builder
 public class CreateUserRequest {
-    private String username;
     private String email;
     private String phoneNumber;
     private String password;

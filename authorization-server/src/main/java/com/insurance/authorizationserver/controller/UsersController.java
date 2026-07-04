@@ -40,12 +40,12 @@ public class UsersController {
             user = (SecurityUser) userDetailsService.loadUserByUsername(request.getUsername());
         } catch (UsernameNotFoundException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body("Invalid username or password");
+                    .body("Invalid credentials");
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body("Invalid username or password");
+                    .body("Invalid credentials");
         }
 
         return ResponseEntity.ok(buildLoginResponse(user));

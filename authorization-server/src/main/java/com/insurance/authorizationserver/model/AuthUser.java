@@ -24,9 +24,6 @@ public class AuthUser {
     @Column(name = "auth_user_id", updatable = false, nullable = false)
     private UUID authUserId;
 
-    @Column(name = "username", unique = true, nullable = false)
-    private String username;
-
     @Column(name = "email", unique = true, nullable = false)
     private String email;
 

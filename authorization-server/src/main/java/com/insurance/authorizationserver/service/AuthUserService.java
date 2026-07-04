@@ -33,9 +33,6 @@ public class AuthUserService {
 
     @Transactional
     public void createUser(CreateUserRequest request) {
-        if (authUserRepository.findByUsername(request.getUsername()).isPresent()) {
-            throw new IllegalArgumentException("Username already exists");
-        }
         if (authUserRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Email already exists");
         }
@@ -52,7 +49,6 @@ public class AuthUserService {
                 .orElseGet(() -> authRoleRepository.save(AuthRole.builder().roleName(formattedRole).build()));
 
         AuthUser authUser = AuthUser.builder()
-                .username(request.getUsername())
                 .email(request.getEmail())
                 .phoneNumber(request.getPhoneNumber())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))

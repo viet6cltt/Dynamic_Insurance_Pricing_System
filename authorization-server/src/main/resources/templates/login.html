@@ -488,7 +488,7 @@
 
             if (!loginCheckResponse.ok) {
               showLoginAlert(
-                "Login failed. Please check your username and password."
+                "Login failed. Please check your credentials."
               );
               return;
             }
@@ -526,7 +526,7 @@
           role="alert"
         >
           <i class="fas fa-circle-exclamation"></i>
-          <span>Login failed. Please check your username and password.</span>
+          <span>Login failed. Please check your credentials.</span>
         </div>
 
         <form th:action="@{/login}" method="post" data-login-form>
@@ -537,13 +537,13 @@
           />
 
           <div style="margin-top: 22px;">
-            <label for="username" class="label">Username</label>
+            <label for="username" class="label">Email or Phone Number</label>
             <input
               type="text"
               id="username"
               name="username"
               required
-              placeholder="Enter your username"
+              placeholder="Enter your email or phone number"
               class="input"
             />
           </div>
