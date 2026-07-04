@@ -34,8 +34,12 @@ export default function Login() {
     
     try {
       setErrorMsg('')
-      await login(emailOrPhone, password)
-      navigate('/')
+      const user = await login(emailOrPhone, password)
+      if (user.role === 'ROLE_ADMIN' || user.role === 'ADMIN') {
+        navigate('/admin')
+      } else {
+        navigate('/')
+      }
     } catch (err) {
       setErrorMsg(err.message || 'Đăng nhập không thành công.')
     }

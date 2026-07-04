@@ -9,7 +9,7 @@ export const customerService = {
     try {
       const response = await axiosClient.get("/notifications");
       // Handle Spring Page/PagedResponse structure
-      return response.content || response || [];
+      return response.items || response.content || response || [];
     } catch (error) {
       console.error("Failed to fetch notifications", error);
       return [];
@@ -20,7 +20,7 @@ export const customerService = {
     try {
       const response = await axiosClient.get("/products");
       // GET /products returns paged list, we extract content
-      return response.content || response || [];
+      return response.items || response.content || response || [];
     } catch (error) {
       console.error("Failed to fetch products", error);
       return [];

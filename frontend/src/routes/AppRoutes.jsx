@@ -7,11 +7,29 @@ import Register from "../pages/Register/Register";
 import OAuth2Callback from "../pages/Auth/OAuth2Callback";
 import CompleteProfile from "../pages/Auth/CompleteProfile";
 import CustomerDashboard from "../pages/CustomerDashboard/CustomerDashboard";
+import AdminDashboard from "../pages/AdminDashboard/AdminDashboard";
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
   return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
+
+// Admin Route Component
+function AdminRoute({ children }) {
+  const { isAuthenticated, user } = useAuthStore();
+  const localUserStr = localStorage.getItem("user");
+  const localUser = localUserStr ? JSON.parse(localUserStr) : null;
+  const role = user?.role || localUser?.role;
+  const isAdmin = role === "ROLE_ADMIN" || role === "ADMIN";
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
 }
 
 export default function AppRoutes() {
@@ -83,6 +101,47 @@ export default function AppRoutes() {
             <ProtectedRoute>
               <CustomerDashboard />
             </ProtectedRoute>
+          } 
+        />
+        {/* Admin Routes */}
+        <Route 
+          path="/admin" 
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          } 
+        />
+        <Route 
+          path="/admin/products" 
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          } 
+        />
+        <Route 
+          path="/admin/coverage-plans" 
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          } 
+        />
+        <Route 
+          path="/admin/risk-schemas" 
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          } 
+        />
+        <Route 
+          path="/admin/occupation-mappings" 
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
           } 
         />
         <Route path="*" element={<Navigate to="/" replace />} />
