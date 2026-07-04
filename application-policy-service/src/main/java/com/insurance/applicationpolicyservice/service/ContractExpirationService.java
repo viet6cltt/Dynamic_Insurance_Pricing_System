@@ -6,9 +6,11 @@ import com.insurance.applicationpolicyservice.repository.InsuranceContractReposi
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -22,6 +24,32 @@ public class ContractExpirationService {
     private final PolicyEventFactory policyEventFactory;
     private final PolicyOutboxService policyOutboxService;
 
+    @Value("${app.policy.expiry-reminder-days:7}")
+    private int expiryReminderDays;
+
+    @Scheduled(cron = "${app.policy.expiration-cron:0 5 0 * * *}")
+    @Transactional
+    public int sendExpiryReminders() {
+        LocalDate targetDate = LocalDate.now().plusDays(expiryReminderDays);
+        List<InsuranceContract> contracts = contractRepository.findContractsNeedingExpiryReminderForUpdate(targetDate);
+
+        for (InsuranceContract contract : contracts) {
+            contract.setExpiryReminderSentAt(Instant.now());
+            InsuranceContract saved = contractRepository.save(contract);
+            policyOutboxService.enqueue(policyEventFactory.createContractExpiryReminderEvent(
+                    saved,
+                    expiryReminderDays,
+                    null,
+                    null
+            ));
+        }
+
+        if (!contracts.isEmpty()) {
+            log.info("Queued {} expiry reminders for contracts expiring on {}", contracts.size(), targetDate);
+        }
+        return contracts.size();
+    }
+
     @Scheduled(cron = "${app.policy.expiration-cron:0 5 0 * * *}")
     @Transactional
     public int expireActiveContracts() {
@@ -34,7 +62,7 @@ public class ContractExpirationService {
             contractService.updateExperienceSummary(saved);
             policyOutboxService.enqueue(policyEventFactory.createContractEvent(
                     saved,
-                    "policy.expired",
+                    "contract.expired",
                     null,
                     null
             ));

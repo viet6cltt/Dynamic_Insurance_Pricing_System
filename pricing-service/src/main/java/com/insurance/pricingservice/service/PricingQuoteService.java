@@ -48,6 +48,8 @@ public class PricingQuoteService {
 
     private final RatingEngine ratingEngine;
     private final RiskLevelCalculator riskLevelCalculator;
+    private final PricingEventFactory pricingEventFactory;
+    private final PricingOutboxService pricingOutboxService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -288,6 +290,15 @@ public class PricingQuoteService {
                 .build();
         auditLogRepository.save(auditLog);
 
+        if ("GENERATED".equals(savedQuote.getStatus())) {
+            pricingOutboxService.enqueue(pricingEventFactory.createQuoteEvent(
+                    savedQuote,
+                    "quote.generated",
+                    null,
+                    null
+            ));
+        }
+
         return mapToResponse(savedQuote, explanation);
     }
 
@@ -316,7 +327,7 @@ public class PricingQuoteService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = IllegalStateException.class)
     public QuoteResponse acceptQuote(UUID quoteId) {
         PremiumQuote quote = quoteRepository.findById(quoteId)
                 .orElseThrow(() -> new IllegalArgumentException("Premium quote not found with ID: " + quoteId));
@@ -327,7 +338,13 @@ public class PricingQuoteService {
 
         if (quote.getExpiredAt().isBefore(Instant.now())) {
             quote.setStatus("EXPIRED");
-            quoteRepository.save(quote);
+            PremiumQuote saved = quoteRepository.save(quote);
+            pricingOutboxService.enqueue(pricingEventFactory.createQuoteEvent(
+                    saved,
+                    "quote.expired",
+                    null,
+                    null
+            ));
             throw new IllegalStateException("Quote has expired");
         }
 
@@ -344,7 +361,13 @@ public class PricingQuoteService {
 
         if (quote.getExpiredAt().isBefore(Instant.now())) {
             quote.setStatus("EXPIRED");
-            quoteRepository.save(quote);
+            PremiumQuote saved = quoteRepository.save(quote);
+            pricingOutboxService.enqueue(pricingEventFactory.createQuoteEvent(
+                    saved,
+                    "quote.expired",
+                    null,
+                    null
+            ));
             throw new IllegalStateException("Quote has expired");
         }
 

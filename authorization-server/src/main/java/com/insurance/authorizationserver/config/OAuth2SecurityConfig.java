@@ -83,6 +83,8 @@ public class OAuth2SecurityConfig {
                 .authorizeHttpRequests(
                         c -> c
                                 .requestMatchers("/login", "/login.html", "/logout").permitAll()
+                                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**",
+                                        "/swagger-resources/**", "/webjars/**").permitAll()
                                 .requestMatchers("/api/v1/users/register", "/api/v1/users/login", "/api/v1/users/refresh").permitAll()
                                 .anyRequest().authenticated());
         http.logout(logout -> logout
@@ -93,7 +95,9 @@ public class OAuth2SecurityConfig {
                     response.setStatus(HttpServletResponse.SC_OK);
                 }));
         http.csrf(csrf -> csrf
-                .ignoringRequestMatchers("/logout", "/api/v1/users/register", "/api/v1/users/login", "/api/v1/users/refresh"));
+                .ignoringRequestMatchers("/logout", "/api/v1/users/register", "/api/v1/users/login",
+                        "/api/v1/users/refresh", "/swagger-ui/**", "/v3/api-docs/**",
+                        "/swagger-resources/**", "/webjars/**"));
         http.cors(c -> c.configurationSource(corsConfigurationSource()));
         return http.build();
     }

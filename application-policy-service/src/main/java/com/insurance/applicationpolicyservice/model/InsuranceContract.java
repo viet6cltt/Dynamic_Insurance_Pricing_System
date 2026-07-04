@@ -90,6 +90,9 @@ public class InsuranceContract {
     @Column(name = "payment_status", length = 30)
     private String paymentStatus;
 
+    @Column(name = "expiry_reminder_sent_at")
+    private Instant expiryReminderSentAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

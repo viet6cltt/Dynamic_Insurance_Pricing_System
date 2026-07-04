@@ -8,6 +8,12 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
+  task:
+    scheduling:
+      enabled: false
+  cloud:
+    discovery:
+      enabled: false
 
 app:
   services:
@@ -15,3 +21,5 @@ app:
     user-service-url: http://localhost:8081
     application-policy-service-url: http://localhost:8084
     ai-model-service-url: http://localhost:8000
+  outbox:
+    publisher-enabled: false

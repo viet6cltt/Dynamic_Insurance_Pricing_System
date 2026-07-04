@@ -19,6 +19,13 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
 
 app:
   services:
@@ -26,6 +33,16 @@ app:
     user-service-url: ${USER_SERVICE_URL:http://localhost:8081}
     application-policy-service-url: ${POLICY_SERVICE_URL:http://localhost:8084}
     ai-model-service-url: ${AI_MODEL_SERVICE_URL:http://localhost:8000}
+  kafka:
+    topics:
+      pricing-events: ${PRICING_EVENTS_TOPIC:pricing.events}
+  outbox:
+    publisher-enabled: ${OUTBOX_PUBLISHER_ENABLED:true}
+    poll-delay-ms: ${OUTBOX_POLL_DELAY_MS:1000}
+    batch-size: ${OUTBOX_BATCH_SIZE:50}
+    max-retries: ${OUTBOX_MAX_RETRIES:5}
+  quote:
+    expiration-cron: ${QUOTE_EXPIRATION_CRON:0 10 0 * * *}
 
 # Actuator Endpoints
 management:

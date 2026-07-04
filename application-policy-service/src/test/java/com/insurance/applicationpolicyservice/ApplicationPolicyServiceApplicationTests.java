@@ -252,7 +252,7 @@ public class ApplicationPolicyServiceApplicationTests {
                 .orElseThrow();
         assertEquals(1, after.getActivePolicyCount());
         assertEquals(1, after.getCompletedPolicyCount());
-        assertEquals(1, outboxEventRepository.findByEventType("policy.expired").size());
+        assertEquals(1, outboxEventRepository.findByEventType("contract.expired").size());
     }
 
     @Test

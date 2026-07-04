@@ -34,10 +34,42 @@ public class PolicyEventFactory {
         payloadValues.put("status", contract.getStatus().name());
         payloadValues.put("quotedPremium", contract.getQuotedPremium());
         payloadValues.put("currency", "VND");
+        payloadValues.put("effectiveDate", contract.getEffectiveDate());
+        payloadValues.put("expiryDate", contract.getExpiryDate());
         JsonNode payload = objectMapper.valueToTree(payloadValues);
         return new EventEnvelope(
                 UUID.randomUUID(),
                 eventType,
+                1,
+                Instant.now(),
+                "application-policy-service",
+                "InsuranceContract",
+                contract.getContractId(),
+                correlationId,
+                causationId,
+                payload
+        );
+    }
+
+    public EventEnvelope createContractExpiryReminderEvent(InsuranceContract contract,
+                                                           int daysUntilExpiry,
+                                                           String correlationId,
+                                                           String causationId) {
+        Map<String, Object> payloadValues = new HashMap<>();
+        payloadValues.put("contractId", contract.getContractId());
+        payloadValues.put("quoteId", contract.getQuoteId());
+        payloadValues.put("customerId", contract.getApplicantUserId());
+        payloadValues.put("insuredPersonId", contract.getInsuredPersonId());
+        payloadValues.put("status", contract.getStatus().name());
+        payloadValues.put("quotedPremium", contract.getQuotedPremium());
+        payloadValues.put("currency", "VND");
+        payloadValues.put("effectiveDate", contract.getEffectiveDate());
+        payloadValues.put("expiryDate", contract.getExpiryDate());
+        payloadValues.put("daysUntilExpiry", daysUntilExpiry);
+        JsonNode payload = objectMapper.valueToTree(payloadValues);
+        return new EventEnvelope(
+                UUID.randomUUID(),
+                "contract.expiring_soon",
                 1,
                 Instant.now(),
                 "application-policy-service",

@@ -31,14 +31,36 @@ app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:*}
   services:
+    user-service-url: ${USER_SERVICE_URL:http://localhost:8081}
+    auth-service-url: ${AUTH_SERVICE_URL:http://localhost:9000}
+    product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
     pricing-service-url: ${PRICING_SERVICE_URL:http://localhost:8083}
     policy-service-url: ${POLICY_SERVICE_URL:http://localhost:8084}
     payment-service-url: ${PAYMENT_SERVICE_URL:http://localhost:8085}
+    notification-service-url: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
   rate-limit:
     user-profile-update:
       enabled: ${USER_PROFILE_UPDATE_RATE_LIMIT_ENABLED:true}
       max-requests: ${USER_PROFILE_UPDATE_RATE_LIMIT_MAX_REQUESTS:5}
       window: ${USER_PROFILE_UPDATE_RATE_LIMIT_WINDOW:1m}
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: user-service
+        url: /docs/user/v3/api-docs
+      - name: authorization-server
+        url: /docs/auth/v3/api-docs
+      - name: product-service
+        url: /docs/product/v3/api-docs
+      - name: pricing-service
+        url: /docs/pricing/v3/api-docs
+      - name: application-policy-service
+        url: /docs/policy/v3/api-docs
+      - name: payment-service
+        url: /docs/payment/v3/api-docs
+      - name: notification-service
+        url: /docs/notification/v3/api-docs
 
 eureka:
   client:

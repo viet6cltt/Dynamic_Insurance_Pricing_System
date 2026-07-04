@@ -65,7 +65,7 @@ public class SecurityConfig {
             c.configurationSource(source);
         });
         http.authorizeHttpRequests(
-                c -> c.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                c -> c.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/docs/**").permitAll()
                         .anyRequest().authenticated());
         http.addFilterAfter(profileUpdateRateLimitFilter, BearerTokenAuthenticationFilter.class);
         return http.build();

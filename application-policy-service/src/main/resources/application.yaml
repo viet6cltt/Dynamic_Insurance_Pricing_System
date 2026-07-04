@@ -49,6 +49,7 @@ app:
     max-retries: ${OUTBOX_MAX_RETRIES:5}
   policy:
     expiration-cron: ${POLICY_EXPIRATION_CRON:0 5 0 * * *}
+    expiry-reminder-days: ${CONTRACT_EXPIRY_REMINDER_DAYS:7}
 
 # Actuator Endpoints
 management:

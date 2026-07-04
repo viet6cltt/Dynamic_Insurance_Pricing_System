@@ -31,4 +31,14 @@ public interface InsuranceContractRepository extends JpaRepository<InsuranceCont
             order by c.expiryDate asc
             """)
     List<InsuranceContract> findExpiredActiveContractsForUpdate(@Param("today") LocalDate today);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select c from InsuranceContract c
+            where c.status = com.insurance.applicationpolicyservice.dto.ContractStatus.ACTIVE
+              and c.expiryDate = :targetDate
+              and c.expiryReminderSentAt is null
+            order by c.expiryDate asc
+            """)
+    List<InsuranceContract> findContractsNeedingExpiryReminderForUpdate(@Param("targetDate") LocalDate targetDate);
 }
