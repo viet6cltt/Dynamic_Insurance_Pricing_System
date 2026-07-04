@@ -1,0 +1,73 @@
+server:
+  port: ${PORT:8086}
+
+spring:
+  application:
+    name: notification-service
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:${POSTGRES_HOST:${HOST:localhost}}}:${DB_PORT:${POSTGRES_PORT:5438}}/${DB_NAME:${POSTGRES_DB:notification_db}}
+    username: ${DB_USER:${POSTGRES_USER:postgres}}
+    password: ${DB_PASSWORD:${POSTGRES_PASSWORD:postgres}}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${NOTIFICATION_EVENTS_CONSUMER_GROUP:notification-service-group}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS_ENABLE:false}
+
+app:
+  services:
+    user-service-url: ${USER_SERVICE_URL:http://localhost:8081}
+  mail:
+    from: ${MAIL_FROM:no-reply@insurance.local}
+    from-name: ${MAIL_FROM_NAME:Dynamic Insurance}
+  kafka:
+    topics:
+      payment-events: ${PAYMENT_EVENTS_TOPIC:payment.events}
+      policy-events: ${POLICY_EVENTS_TOPIC:policy.events}
+      pricing-events: ${PRICING_EVENTS_TOPIC:pricing.events}
+    consumer-groups:
+      notifications: ${NOTIFICATION_EVENTS_CONSUMER_GROUP:notification-service-group}
+  email:
+    outbox:
+      poll-delay-ms: ${EMAIL_OUTBOX_POLL_DELAY_MS:1000}
+      batch-size: ${EMAIL_OUTBOX_BATCH_SIZE:25}
+      max-retries: ${EMAIL_OUTBOX_MAX_RETRIES:5}
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
