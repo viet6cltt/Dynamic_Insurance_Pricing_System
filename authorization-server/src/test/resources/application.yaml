@@ -21,6 +21,7 @@ app:
   client-uri: http://localhost:3000
   google:
     client-id: dummy-google-id
+    client-secret: dummy-google-secret
     redirect-path: /login/oauth2/code/google
   cors:
     allowed-origins: http://localhost:3000

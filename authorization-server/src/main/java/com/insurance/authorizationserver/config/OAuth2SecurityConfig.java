@@ -85,7 +85,8 @@ public class OAuth2SecurityConfig {
                                 .requestMatchers("/login", "/login.html", "/logout").permitAll()
                                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**",
                                         "/swagger-resources/**", "/webjars/**").permitAll()
-                                .requestMatchers("/api/v1/users/register", "/api/v1/users/login", "/api/v1/users/refresh").permitAll()
+                                .requestMatchers("/api/v1/users/register", "/api/v1/users/login",
+                                        "/api/v1/users/refresh", "/api/v1/oauth/google/exchange").permitAll()
                                 .anyRequest().authenticated());
         http.logout(logout -> logout
                 .logoutUrl("/logout")
@@ -96,7 +97,8 @@ public class OAuth2SecurityConfig {
                 }));
         http.csrf(csrf -> csrf
                 .ignoringRequestMatchers("/logout", "/api/v1/users/register", "/api/v1/users/login",
-                        "/api/v1/users/refresh", "/swagger-ui/**", "/v3/api-docs/**",
+                        "/api/v1/users/refresh", "/api/v1/oauth/google/exchange",
+                        "/swagger-ui/**", "/v3/api-docs/**",
                         "/swagger-resources/**", "/webjars/**"));
         http.cors(c -> c.configurationSource(corsConfigurationSource()));
         return http.build();

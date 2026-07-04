@@ -5,7 +5,6 @@ import com.insurance.userservice.dto.UpdateUserProfileRequest;
 import com.insurance.userservice.dto.UserProfileResponse;
 import com.insurance.userservice.model.UserProfile;
 import com.insurance.userservice.repository.UserProfileRepository;
-import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,8 +23,10 @@ public class UserProfileService {
         if (userProfileRepository.findByAuthUserId(request.authUserId()).isPresent()) {
             throw new IllegalArgumentException("User profile with authUserId already exists: " + request.authUserId());
         }
-        if (request.identityNumber() != null && userProfileRepository.existsByIdentityNumber(request.identityNumber())) {
-            throw new IllegalArgumentException("User profile with identityNumber already exists: " + request.identityNumber());
+        if (request.identityNumber() != null
+                && userProfileRepository.existsByIdentityNumber(request.identityNumber())) {
+            throw new IllegalArgumentException(
+                    "User profile with identityNumber already exists: " + request.identityNumber());
         }
 
         UserProfile userProfile = UserProfile.builder()
@@ -89,7 +90,6 @@ public class UserProfileService {
                 userProfile.getGender(),
                 userProfile.getCustomerStatus(),
                 userProfile.getCreatedAt(),
-                userProfile.getUpdatedAt()
-        );
+                userProfile.getUpdatedAt());
     }
 }

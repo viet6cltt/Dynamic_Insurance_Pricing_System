@@ -27,6 +27,9 @@ public class AuthUser {
     @Column(name = "email", unique = true, nullable = false)
     private String email;
 
+    @Column(name = "username", unique = true, nullable = false)
+    private String username;
+
     @Column(name = "phone_number", unique = true, length = 20)
     private String phoneNumber;
 

@@ -50,6 +50,7 @@ public class AuthUserService {
 
         AuthUser authUser = AuthUser.builder()
                 .email(request.getEmail())
+                .username(request.getEmail())
                 .phoneNumber(request.getPhoneNumber())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .roles(Set.of(authRole))
@@ -59,6 +60,36 @@ public class AuthUserService {
 
         // Sync with User Service
         syncUserProfile(authUser, request);
+    }
+
+    @Transactional
+    public AuthUser findOrCreateGoogleUser(String email, String fullName, boolean emailVerified) {
+        return authUserRepository.findByEmail(email)
+                .orElseGet(() -> createGoogleUser(email, fullName, emailVerified));
+    }
+
+    private AuthUser createGoogleUser(String email, String fullName, boolean emailVerified) {
+        AuthRole authRole = authRoleRepository.findByRoleName("ROLE_USER")
+                .orElseGet(() -> authRoleRepository.save(AuthRole.builder().roleName("ROLE_USER").build()));
+
+        AuthUser authUser = AuthUser.builder()
+                .email(email)
+                .username(email)
+                .passwordHash(passwordEncoder.encode(UUID.randomUUID().toString()))
+                .emailVerified(emailVerified)
+                .phoneVerified(false)
+                .roles(Set.of(authRole))
+                .build();
+
+        AuthUser saved = authUserRepository.save(authUser);
+
+        syncUserProfile(saved, CreateUserRequest.builder()
+                .email(email)
+                .fullName(fullName == null || fullName.isBlank() ? email : fullName)
+                .role("USER")
+                .build());
+
+        return saved;
     }
 
     private void syncUserProfile(AuthUser authUser, CreateUserRequest request) {

@@ -33,6 +33,7 @@ app:
   client-uri: ${CLIENT_APP_URI:http://localhost:3000}
   google:
     client-id: ${GOOGLE_CLIENT_ID:your-google-client-id}
+    client-secret: ${GOOGLE_CLIENT_SECRET:your-google-client-secret}
     redirect-path: ${GOOGLE_REDIRECT_PATH:/login/oauth2/code/google}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
