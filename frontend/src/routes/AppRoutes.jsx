@@ -93,6 +93,14 @@ export default function AppRoutes() {
             </ProtectedRoute>
           } 
         />
+        <Route
+          path="/claims"
+          element={
+            <ProtectedRoute>
+              <CustomerDashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route 
           path="/notifications" 
           element={
@@ -157,6 +165,14 @@ export default function AppRoutes() {
               <AdminDashboard />
             </AdminRoute>
           } 
+        />
+        <Route
+          path="/admin/notifications"
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

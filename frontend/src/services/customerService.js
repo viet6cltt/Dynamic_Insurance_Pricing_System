@@ -10,6 +10,15 @@ export const customerService = {
     return axiosClient.get(`/contracts/${contractId}`);
   },
 
+  getClaimHistory: async () => {
+    try {
+      return await axiosClient.get("/contracts/claims/me");
+    } catch (error) {
+      console.error("Failed to fetch claim history", error);
+      return [];
+    }
+  },
+
   createContract: async (payload) => {
     // payload: { quoteId, insuredPersonId, productId, coveragePlanId, simulatePaymentResult? }
     return axiosClient.post("/contracts", payload);
@@ -115,18 +124,37 @@ export const customerService = {
   },
 
   // ── Notifications ──────────────────────────────────────────────────────────
-  getNotifications: async () => {
+  getNotifications: async ({ status, page = 0, size = 20 } = {}) => {
     try {
-      const response = await axiosClient.get("/notifications");
-      return response.items || response.content || response || [];
+      const params = new URLSearchParams({ page, size });
+      if (status) params.append("status", status);
+      return await axiosClient.get(`/notifications?${params}`);
     } catch (error) {
       console.error("Failed to fetch notifications", error);
-      return [];
+      return { content: [], page, size, totalElements: 0, totalPages: 0 };
+    }
+  },
+
+  getUnreadNotificationCount: async () => {
+    try {
+      const response = await axiosClient.get("/notifications/unread-count");
+      return response?.unreadCount ?? 0;
+    } catch (error) {
+      console.error("Failed to fetch unread notification count", error);
+      return 0;
     }
   },
 
   markNotificationRead: async (notificationId) => {
     return axiosClient.patch(`/notifications/${notificationId}/read`);
+  },
+
+  markAllNotificationsRead: async () => {
+    return axiosClient.patch("/notifications/read-all");
+  },
+
+  archiveNotification: async (notificationId) => {
+    return axiosClient.patch(`/notifications/${notificationId}/archive`);
   },
 
   // ── Payments ───────────────────────────────────────────────────────────────

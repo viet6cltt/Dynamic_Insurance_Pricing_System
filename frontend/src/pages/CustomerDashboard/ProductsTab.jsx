@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   Shield, HeartPulse, Car, Search, Filter, ChevronLeft,
   Loader2, CheckCircle, AlertCircle, X, ArrowRight,
-  Clock, Users, Layers, BadgeCheck, ChevronDown
+  Clock, Users, Layers, BadgeCheck, ChevronDown, ArrowUp, ArrowDown
 } from "lucide-react";
 import { customerService } from "../../services/customerService";
 import { authService } from "../../services/authService";
@@ -62,7 +62,13 @@ const FALLBACK_RISK_FIELDS = [
 const SELF_OPTION_ID = "__SELF__";
 
 function formatMoney(value) {
-  return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
+  return `${Number(value || 0).toLocaleString("vi-VN", { maximumFractionDigits: 0 })}đ`;
+}
+
+function formatSignedMoney(value) {
+  const amount = Number(value || 0);
+  const prefix = amount > 0 ? "+" : amount < 0 ? "-" : "";
+  return `${prefix}${formatMoney(Math.abs(amount))}`;
 }
 
 function extractItems(response) {
@@ -212,13 +218,21 @@ function formatFeatureName(value) {
     occupationRisk: "Rủi ro nghề nghiệp",
     occupationCode: "Nghề nghiệp",
     pastClaimCount: "Số lần bồi thường trước đây",
+    past_claim_count: "Số lần bồi thường trước đây",
     totalPastClaimAmount: "Tổng tiền bồi thường trước đây",
+    total_past_claim_amount: "Tổng tiền bồi thường trước đây",
     claimFreeYears: "Số năm không bồi thường",
+    claim_free_years: "Số năm không bồi thường",
     recencyWeightedClaimScore: "Điểm bồi thường gần đây",
+    recency_weighted_claim_score: "Điểm bồi thường gần đây",
     prevCostClaimsYear: "Chi phí bồi thường năm trước",
+    prev_cost_claims_year: "Chi phí bồi thường năm trước",
     prevNMedicalServices: "Số lần dùng dịch vụ y tế năm trước",
+    prev_n_medical_services: "Số lần dùng dịch vụ y tế năm trước",
     prevHadClaimOrService: "Có bồi thường/dịch vụ năm trước",
+    prev_had_claim_or_service: "Có bồi thường/dịch vụ năm trước",
     claimFreePreviousYear: "Không bồi thường năm trước",
+    claim_free_previous_year: "Không bồi thường năm trước",
   };
   if (labels[key]) return labels[key];
   return key
@@ -238,12 +252,40 @@ function formatImpact(impact) {
   return { label: "Ít ảnh hưởng", className: "bg-gray-50 text-gray-600 border-gray-100" };
 }
 
-function formatSignedNumber(value) {
-  if (value === undefined || value === null || value === "") return "";
-  const number = Number(value);
-  if (Number.isNaN(number)) return String(value);
-  const prefix = number > 0 ? "+" : "";
-  return `${prefix}${number.toFixed(Math.abs(number) >= 10 ? 1 : 3)}`;
+function formatRiskLevelLabel(value) {
+  const normalized = String(value || "").toUpperCase();
+  if (normalized === "LOW") return "Thấp";
+  if (normalized === "HIGH") return "Cao";
+  if (normalized === "MODERATE" || normalized === "MEDIUM") return "Trung bình";
+  if (normalized === "STANDARD") return "Tiêu chuẩn";
+  return value || "Chưa xác định";
+}
+
+function formatExplanationModel(model) {
+  const normalized = String(model || "").toLowerCase();
+  if (normalized === "portfolio") {
+    return { label: "Lịch sử bảo hiểm", className: "bg-amber-50 text-amber-700 border-amber-100" };
+  }
+  if (normalized === "health") {
+    return { label: "Hồ sơ sức khỏe", className: "bg-blue-50 text-blue-700 border-blue-100" };
+  }
+  return { label: "Mô hình", className: "bg-gray-50 text-gray-600 border-gray-100" };
+}
+
+function normalizeHealthFactorTitle(feature, rawContribution, impact) {
+  const key = String(feature || "").trim();
+  const decreases = rawContribution < 0 || String(impact || "").toLowerCase() === "decrease";
+  const labels = {
+    smoker: decreases ? "Không hút thuốc" : "Có hút thuốc",
+    bmi: decreases ? "BMI ở mức phù hợp" : "BMI cần lưu ý",
+    age: "Độ tuổi hiện tại",
+    children: "Số người phụ thuộc",
+    bloodPressure: decreases ? "Huyết áp ở mức phù hợp" : "Huyết áp cần lưu ý",
+    exerciseFrequency: decreases ? "Tần suất vận động tốt" : "Tần suất vận động thấp",
+    preExistingCondition: decreases ? "Không ghi nhận bệnh nền" : "Có bệnh nền",
+    occupationRisk: decreases ? "Nghề nghiệp rủi ro thấp" : "Rủi ro nghề nghiệp",
+  };
+  return labels[key] || formatFeatureName(feature);
 }
 
 function normalizeExplanationItem(item) {
@@ -253,6 +295,7 @@ function normalizeExplanationItem(item) {
       impact: formatImpact("neutral"),
       detail: "",
       contribution: "",
+      model: null,
     };
   }
   if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
@@ -261,16 +304,76 @@ function normalizeExplanationItem(item) {
       impact: formatImpact("neutral"),
       detail: "",
       contribution: "",
+      model: null,
     };
   }
 
-  const feature = item.feature || item.factor || item.name || item.key || item.sourceFeature || "Yếu tố";
+  const feature = item.sourceFeature || item.feature || item.factor || item.name || item.key || "Yếu tố";
+  const rawContribution = Number(item.contribution ?? item.value ?? item.score ?? 0);
+  const modelKey = String(item.model || "").toLowerCase();
   return {
-    title: formatFeatureName(feature),
+    title: modelKey === "health"
+      ? normalizeHealthFactorTitle(feature, Number.isNaN(rawContribution) ? 0 : rawContribution, item.impact || item.direction || item.effect || item.trend)
+      : formatFeatureName(feature),
     impact: formatImpact(item.impact || item.direction || item.effect || item.trend),
     detail: item.readableReason || item.reason || "",
-    contribution: formatSignedNumber(item.contribution ?? item.value ?? item.score),
+    contribution: "",
+    rawContribution: Number.isNaN(rawContribution) ? 0 : rawContribution,
+    modelKey,
+    model: formatExplanationModel(item.model),
   };
+}
+
+function selectVisibleHealthFactors(items, limit = 3) {
+  return items
+    .filter((item) => item.modelKey !== "portfolio")
+    .sort((a, b) => Math.abs(b.rawContribution || 0) - Math.abs(a.rawContribution || 0))
+    .slice(0, limit);
+}
+
+function getImpactTone(amount) {
+  const absAmount = Math.abs(Number(amount || 0));
+  if (absAmount < 50000) return "nhẹ";
+  if (absAmount < 300000) return "vừa";
+  return "nhiều";
+}
+
+function formatImpactBadge(amount) {
+  const value = Number(amount || 0);
+  if (Math.abs(value) < 1) {
+    return { label: "Trung tính", className: "bg-gray-50 text-gray-600 border-gray-100" };
+  }
+  const tone = getImpactTone(value);
+  if (value > 0) {
+    return { label: `Tăng ${tone}`, className: "bg-red-50 text-red-700 border-red-100" };
+  }
+  return { label: `Giảm ${tone}`, className: "bg-emerald-50 text-emerald-700 border-emerald-100" };
+}
+
+function formatQualitativeFactorBadge(item) {
+  const increases = item?.rawContribution > 0 || item?.impact?.label === "Làm tăng phí";
+  if (increases) {
+    return { label: "Bất lợi", className: "bg-red-50 text-red-700 border-red-100" };
+  }
+  return { label: "Tích cực", className: "bg-emerald-50 text-emerald-700 border-emerald-100" };
+}
+
+function getReadableFactorReason(item) {
+  if (item?.modelKey === "portfolio") {
+    return "Lịch sử bảo hiểm và sử dụng dịch vụ y tế ảnh hưởng đến điều chỉnh phí.";
+  }
+  const title = item?.title || "";
+  const lower = String(title || "").toLowerCase();
+  const decreases = item?.rawContribution < 0 || item?.impact?.label === "Giúp giảm phí";
+  if (lower.includes("không hút thuốc")) return "Giúp giảm mức rủi ro sức khỏe.";
+  if (lower.includes("có hút thuốc")) return "Làm tăng mức rủi ro sức khỏe.";
+  if (lower.includes("nghề nghiệp")) return "Công việc có mức độ rủi ro cao hơn.";
+  if (lower.includes("bmi")) return decreases ? "Chỉ số BMI của bạn nằm trong vùng phù hợp." : "Chỉ số BMI làm tăng rủi ro sức khỏe.";
+  if (lower.includes("tuổi")) return decreases ? "Nhóm tuổi của bạn có rủi ro dự kiến thấp hơn." : "Độ tuổi làm thay đổi mức rủi ro.";
+  if (lower.includes("bồi thường") || lower.includes("dịch vụ y tế")) return "Lịch sử bảo hiểm và sử dụng dịch vụ y tế ảnh hưởng đến điều chỉnh phí.";
+  if (lower.includes("huyết áp")) return "Huyết áp làm thay đổi nguy cơ sức khỏe.";
+  if (lower.includes("bệnh nền")) return "Bệnh nền làm thay đổi nguy cơ sức khỏe.";
+  return decreases ? "Yếu tố này giúp giảm rủi ro trong mô hình." : "Yếu tố này làm tăng rủi ro trong mô hình.";
 }
 
 // ── ProductCard ───────────────────────────────────────────────────────────────
@@ -655,130 +758,185 @@ function RiskFieldInput({ field, value, onChange, occupationMappings, riskProfil
   );
 }
 
-function QuoteExplanationPanel({ quote }) {
+function QuoteExplanationPanel({ quote, planName, onEdit, onContinue, submitting }) {
   const explanation = quote?.explanation;
-  const topRiskFactors = toDisplayList(explanation?.topRiskFactors).slice(0, 5);
+  const allRiskFactors = toDisplayList(explanation?.topRiskFactors).map(normalizeExplanationItem);
+  const healthRiskFactors = selectVisibleHealthFactors(allRiskFactors, 3);
   const shapValues = toDisplayList(explanation?.shapValues).slice(0, 5);
-  const methodLabel = explanation?.explanationMethod && explanation.explanationMethod !== "none"
-    ? explanation.explanationMethod.toUpperCase()
-    : "Pricing engine";
+  const finalPremium = Number(quote.finalPremium || 0);
+  const basePremium = Number(quote.basePremium || 0);
+  const monthlyPremium = finalPremium / 12;
+  const healthFactor = Number(quote.healthRiskFactor ?? 1);
+  const portfolioFactor = Number(quote.portfolioRiskFactor ?? 1);
+  const healthAdjustedPremium = basePremium * healthFactor;
+  const healthAdjustment = healthAdjustedPremium - basePremium;
+  const portfolioAdjustment = finalPremium - basePremium - healthAdjustment;
+  const hasPortfolioAdjustment = Math.abs(portfolioAdjustment) >= 1;
+  const hasNeutralPortfolioAdjustment = Math.abs(portfolioFactor - 1) < 0.005;
+  const portfolioBadge = formatImpactBadge(portfolioAdjustment);
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-5 space-y-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="font-bold text-gray-900">Giải thích báo giá</h4>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Tóm tắt những yếu tố làm phí thay đổi so với mức cơ sở.
+    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-200">
+        <h4 className="font-bold text-gray-900">Báo giá bảo hiểm sức khỏe</h4>
+        <p className="text-sm font-semibold text-gray-500 mt-0.5">Gói {planName || quote.planName || "Standard"}</p>
+      </div>
+
+      <div className="px-5 py-5 space-y-4">
+        <div className="text-center">
+          <p className="text-3xl font-extrabold text-gray-950">
+            {formatMoney(finalPremium)}
+            <span className="text-base font-bold text-gray-500">/năm</span>
           </p>
+          <p className="mt-1 text-sm font-semibold text-gray-500">{formatMoney(monthlyPremium)}/tháng</p>
         </div>
-        <span className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-bold text-gray-600">
-          {methodLabel}
-        </span>
+
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-gray-500">Phí cơ bản</span>
+            <span className="font-bold text-gray-900">{formatMoney(basePremium)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-gray-500">Điều chỉnh hồ sơ sức khỏe</span>
+            <span className={`font-bold ${healthAdjustment >= 0 ? "text-red-600" : "text-emerald-600"}`}>
+              {formatSignedMoney(healthAdjustment)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-gray-500">Điều chỉnh theo lịch sử bảo hiểm</span>
+            <span className={`font-bold ${portfolioAdjustment > 0 ? "text-red-600" : portfolioAdjustment < 0 ? "text-emerald-600" : "text-gray-900"}`}>
+              {formatSignedMoney(portfolioAdjustment)}
+            </span>
+          </div>
+          <div className="border-t border-gray-100 pt-2 flex items-center justify-between gap-4">
+            <span className="font-bold text-gray-900">Tổng phí</span>
+            <span className="font-extrabold text-gray-950">{formatMoney(finalPremium)}</span>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
-          <p className="text-[10px] font-bold uppercase text-blue-500">Phí cuối cùng</p>
-          <p className="text-sm font-extrabold text-blue-800">{formatMoney(quote.finalPremium)}</p>
-        </div>
-        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-          <p className="text-[10px] font-bold uppercase text-gray-400">Phí cơ sở</p>
-          <p className="text-sm font-extrabold text-gray-800">{formatMoney(quote.basePremium)}</p>
-        </div>
-        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-          <p className="text-[10px] font-bold uppercase text-gray-400">Chi phí sức khỏe dự đoán</p>
-          <p className="text-sm font-extrabold text-gray-800">{formatMoney(quote.predictedHealthCost)}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-600">
-        <div className="rounded-lg bg-gray-50 px-3 py-2">
+      <div className="border-t border-gray-200 px-5 py-5 space-y-4">
+        <p className="text-sm text-gray-600">
           <span className="font-semibold text-gray-500">Mức rủi ro: </span>
-          <span className="font-bold text-gray-800">{quote.riskLevel}</span>
-        </div>
-        <div className="rounded-lg bg-gray-50 px-3 py-2">
-          <span className="font-semibold text-gray-500">Sức khỏe: </span>
-          <span className="font-bold text-gray-800">x{Number(quote.healthRiskFactor || 1).toFixed(2)}</span>
-        </div>
-        <div className="rounded-lg bg-gray-50 px-3 py-2">
-          <span className="font-semibold text-gray-500">Lịch sử/hồ sơ: </span>
-          <span className="font-bold text-gray-800">x{Number(quote.portfolioRiskFactor || 1).toFixed(2)}</span>
-        </div>
+          <span className="font-bold text-gray-900">{formatRiskLevelLabel(quote.riskLevel)}</span>
+        </p>
+
+        {(healthRiskFactors.length > 0 || hasPortfolioAdjustment || hasNeutralPortfolioAdjustment) ? (
+          <div className="space-y-5">
+            <p className="font-bold text-gray-900">Vì sao phí của bạn ở mức này?</p>
+
+            {healthRiskFactors.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-extrabold uppercase text-gray-400">Hồ sơ sức khỏe</p>
+                {healthRiskFactors.map((item, index) => {
+                  const badge = formatQualitativeFactorBadge(item);
+                  const increases = item.rawContribution > 0 || item.impact.label === "Làm tăng phí";
+                  const Icon = increases ? ArrowUp : ArrowDown;
+                  return (
+                    <div key={`${item.title}-${index}`} className="grid grid-cols-[auto_1fr_auto] gap-3">
+                      <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ${increases ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-900">{item.title}</p>
+                        <p className="mt-1 text-sm leading-relaxed text-gray-500">
+                          {getReadableFactorReason(item)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {(hasPortfolioAdjustment || hasNeutralPortfolioAdjustment) && (
+              <div className="space-y-3">
+                <p className="text-xs font-extrabold uppercase text-gray-400">Lịch sử bảo hiểm</p>
+                {(() => {
+                  const increases = portfolioAdjustment > 0;
+                  const neutral = hasNeutralPortfolioAdjustment;
+                  const Icon = neutral ? Clock : increases ? ArrowUp : ArrowDown;
+                  return (
+                    <div className="grid grid-cols-[auto_1fr_auto] gap-3">
+                      <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ${neutral ? "bg-gray-50 text-gray-500" : increases ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-900">Mức sử dụng quyền lợi</p>
+                        <p className="mt-1 text-sm leading-relaxed text-gray-500">
+                          {neutral
+                            ? "Chưa có đủ dữ liệu lịch sử nên hệ thống áp dụng mức trung tính."
+                            : increases
+                              ? "Lịch sử sử dụng dịch vụ y tế làm phí tăng so với khách hàng có hồ sơ tương đương."
+                              : "Lịch sử sử dụng quyền lợi thấp giúp giảm phí so với khách hàng có hồ sơ tương đương."}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${portfolioBadge.className}`}>
+                          {portfolioBadge.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-800">
+            Chưa có danh sách yếu tố chi tiết từ AI model. Báo giá vẫn dùng phí cơ sở và các hệ số rủi ro hiện có.
+          </div>
+        )}
       </div>
 
-      {topRiskFactors.length > 0 ? (
-        <div className="space-y-3">
-          <p className="text-xs font-bold uppercase text-gray-500">Yếu tố ảnh hưởng chính</p>
-          <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
-            {topRiskFactors.map((item, index) => {
-              const normalizedItem = normalizeExplanationItem(item);
-              return (
-                <div key={`${normalizedItem.title}-${index}`} className="px-4 py-3 bg-white">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
-                        {index + 1}
-                      </span>
-                      <span className="font-semibold text-sm text-gray-900">{normalizedItem.title}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {normalizedItem.contribution && (
-                        <span className="rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-bold text-gray-600">
-                          {normalizedItem.contribution}
+      <div className="border-t border-gray-200 px-5 py-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button onClick={onEdit} className="py-2.5 border border-gray-200 hover:bg-gray-50 rounded-lg text-sm font-bold text-gray-700">
+            Chỉnh sửa hồ sơ
+          </button>
+          <button onClick={onContinue} disabled={submitting} className="py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            <span>Tiếp tục mua</span>
+          </button>
+        </div>
+
+        {shapValues.length > 0 && (
+          <details className="px-1">
+            <summary className="cursor-pointer text-sm font-bold text-gray-600">Xem chi tiết cách tính phí</summary>
+            <div className="mt-3 divide-y divide-gray-100">
+              {shapValues.map((item, index) => {
+                const normalizedItem = normalizeExplanationItem(item);
+                return (
+                  <div key={`${normalizedItem.title}-${index}`} className="py-2 flex items-center justify-between gap-3">
+	                    <span className="text-xs font-medium text-gray-600">{normalizedItem.title}</span>
+	                    <div className="flex items-center gap-2">
+	                      {normalizedItem.model && (
+	                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${normalizedItem.model.className}`}>
+	                          {normalizedItem.model.label}
                         </span>
                       )}
-                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${normalizedItem.impact.className}`}>
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${normalizedItem.impact.className}`}>
                         {normalizedItem.impact.label}
                       </span>
                     </div>
                   </div>
-                  {normalizedItem.detail && (
-                    <p className="mt-2 pl-9 text-xs leading-relaxed text-gray-500">{normalizedItem.detail}</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-relaxed text-gray-600">
-            “Làm tăng phí” nghĩa là yếu tố đó khiến rủi ro cao hơn trong mô hình. “Giúp giảm phí” nghĩa là yếu tố đó làm hồ sơ rủi ro tốt hơn.
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-800">
-          Chưa có danh sách yếu tố chi tiết từ AI model. Báo giá vẫn dùng phí cơ sở và các hệ số rủi ro hiện có.
-        </div>
-      )}
+                );
+              })}
+            </div>
+          </details>
+        )}
 
-      {shapValues.length > 0 && (
-        <details className="rounded-xl border border-gray-100 px-4 py-3">
-          <summary className="cursor-pointer text-sm font-bold text-gray-700">Xem chi tiết kỹ thuật</summary>
-          <div className="mt-3 divide-y divide-gray-100">
-            {shapValues.map((item, index) => {
-              const normalizedItem = normalizeExplanationItem(item);
-              return (
-                <div key={`${normalizedItem.title}-${index}`} className="py-2 flex items-center justify-between gap-3">
-                  <span className="text-xs font-medium text-gray-600">{normalizedItem.title}</span>
-                  <div className="flex items-center gap-2">
-                    {normalizedItem.contribution && (
-                      <span className="text-xs font-bold text-gray-700">{normalizedItem.contribution}</span>
-                    )}
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${normalizedItem.impact.className}`}>
-                      {normalizedItem.impact.label}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+        {explanation?.approximate && (
+          <div className="rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 text-xs text-amber-800">
+            Phần giải thích này là xấp xỉ vì model hoặc dữ liệu giải thích chưa đầy đủ.
           </div>
-        </details>
-      )}
-
-      {explanation?.approximate && (
-        <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-xs text-amber-800">
-          Phần giải thích này là xấp xỉ vì model hoặc dữ liệu giải thích chưa đầy đủ.
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -1027,31 +1185,13 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
             </div>
           ) : quote ? (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5 space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-bold uppercase text-blue-500">Báo giá đã tạo</p>
-                    <h4 className="text-xl font-extrabold text-blue-800">{formatMoney(quote.finalPremium)}</h4>
-                  </div>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-700">{quote.status}</span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                  <p><span className="block text-gray-500">Risk level</span><span className="font-bold">{quote.riskLevel}</span></p>
-                  <p><span className="block text-gray-500">Base</span><span className="font-bold">{formatMoney(quote.basePremium)}</span></p>
-                  <p><span className="block text-gray-500">Health factor</span><span className="font-bold">{Number(quote.healthRiskFactor || 1).toFixed(2)}</span></p>
-                  <p><span className="block text-gray-500">Portfolio factor</span><span className="font-bold">{Number(quote.portfolioRiskFactor || 1).toFixed(2)}</span></p>
-                </div>
-              </div>
-              <QuoteExplanationPanel quote={quote} />
-              <div className="flex gap-3">
-                <button onClick={() => setQuote(null)} className="flex-1 py-2.5 border border-gray-200 hover:bg-gray-50 rounded-xl text-sm font-bold text-gray-600">
-                  Sửa thông tin
-                </button>
-                <button onClick={handleIssueContract} disabled={submitting} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>Chấp nhận và tạo hợp đồng</span>
-                </button>
-              </div>
+              <QuoteExplanationPanel
+                quote={quote}
+                planName={plan.planName}
+                onEdit={() => setQuote(null)}
+                onContinue={handleIssueContract}
+                submitting={submitting}
+              />
             </div>
           ) : (
             <form onSubmit={handleCreateQuote} className="space-y-5">

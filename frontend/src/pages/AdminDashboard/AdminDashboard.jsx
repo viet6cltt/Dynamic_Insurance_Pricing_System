@@ -19,7 +19,9 @@ import {
   Loader2,
   ChevronRight,
   FileCode2,
-  Briefcase
+  Briefcase,
+  Mail,
+  RotateCcw
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -34,6 +36,7 @@ export default function AdminDashboard() {
       case "/admin/coverage-plans": return "plans";
       case "/admin/risk-schemas": return "risk-schemas";
       case "/admin/occupation-mappings": return "occupation-mappings";
+      case "/admin/notifications": return "notifications";
       default: return "overview";
     }
   };
@@ -47,6 +50,8 @@ export default function AdminDashboard() {
       setProductPage(1);
       setPlanPage(1);
       navigate("/admin/coverage-plans");
+    } else if (tabName === "notifications") {
+      navigate("/admin/notifications");
     } else {
       setProductPage(1);
       navigate(`/admin/${tabName}`);
@@ -59,6 +64,7 @@ export default function AdminDashboard() {
     { id: "plans",                label: "Các gói bảo hiểm",         icon: Layers },
     { id: "risk-schemas",         label: "Risk Input Schema",         icon: FileCode2 },
     { id: "occupation-mappings",  label: "Occupation Risk Mapping",   icon: Briefcase },
+    { id: "notifications",        label: "Email thông báo",           icon: Mail },
   ];
 
   const handleLogout = () => {
@@ -76,6 +82,13 @@ export default function AdminDashboard() {
   const [plansError, setPlansError] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
   const [planStatusFilter, setPlanStatusFilter] = useState("");
+
+  const [emailDeliveries, setEmailDeliveries] = useState([]);
+  const [emailDeliveriesLoading, setEmailDeliveriesLoading] = useState(false);
+  const [emailDeliveriesError, setEmailDeliveriesError] = useState("");
+  const [emailDeliveryStatusFilter, setEmailDeliveryStatusFilter] = useState("FAILED");
+  const [emailDeliverySize, setEmailDeliverySize] = useState(50);
+  const [retryingDeliveryId, setRetryingDeliveryId] = useState("");
 
   // --- Toast/Banners ---
   const [successMsg, setSuccessMsg] = useState("");
@@ -146,6 +159,22 @@ export default function AdminDashboard() {
     }
   }, [planStatusFilter]);
 
+  const fetchEmailDeliveries = useCallback(async () => {
+    setEmailDeliveriesLoading(true);
+    setEmailDeliveriesError("");
+    try {
+      const data = await adminService.getEmailDeliveries({
+        status: emailDeliveryStatusFilter,
+        size: emailDeliverySize
+      });
+      setEmailDeliveries(data || []);
+    } catch {
+      setEmailDeliveriesError("Không thể tải danh sách email thông báo.");
+    } finally {
+      setEmailDeliveriesLoading(false);
+    }
+  }, [emailDeliveryStatusFilter, emailDeliverySize]);
+
   useEffect(() => {
     let alive = true;
     async function loadProducts() {
@@ -167,6 +196,18 @@ export default function AdminDashboard() {
     loadPlans();
     return () => { alive = false; };
   }, [activeTab, selectedProductId, planStatusFilter, fetchCoveragePlans]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadEmailDeliveries() {
+      await Promise.resolve();
+      if (alive && activeTab === "notifications") {
+        fetchEmailDeliveries();
+      }
+    }
+    loadEmailDeliveries();
+    return () => { alive = false; };
+  }, [activeTab, fetchEmailDeliveries]);
 
   const triggerToast = (msg, isError = false) => {
     if (isError) {
@@ -330,6 +371,19 @@ export default function AdminDashboard() {
   };
 
   // Helper displays
+  const handleRetryEmailDelivery = async (deliveryId) => {
+    try {
+      setRetryingDeliveryId(deliveryId);
+      await adminService.retryEmailDelivery(deliveryId);
+      triggerToast("Đã đưa email vào hàng đợi gửi lại.");
+      fetchEmailDeliveries();
+    } catch {
+      triggerToast("Không thể gửi lại email thông báo.", true);
+    } finally {
+      setRetryingDeliveryId("");
+    }
+  };
+
   const getProductTypeLabel = (type) => {
     switch (type) {
       case "HEALTH": return "Sức khỏe";
@@ -337,6 +391,30 @@ export default function AdminDashboard() {
       case "VEHICLE": return "Phương tiện";
       default: return type;
     }
+  };
+
+  const getEmailDeliveryStatusClass = (status) => {
+    switch ((status || "").toUpperCase()) {
+      case "SENT":
+        return "bg-emerald-50 text-emerald-700 border-emerald-100";
+      case "PENDING":
+        return "bg-blue-50 text-blue-700 border-blue-100";
+      case "FAILED":
+        return "bg-rose-50 text-rose-700 border-rose-100";
+      default:
+        return "bg-gray-100 text-gray-600 border-gray-200";
+    }
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return "Chưa có";
+    return new Date(value).toLocaleString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
   };
 
   return (
@@ -773,14 +851,147 @@ export default function AdminDashboard() {
           )}
 
           {/* ================================================================ */}
-          {/* TAB 4: RISK INPUT SCHEMA */}
+          {/* TAB 4: NOTIFICATION EMAIL DELIVERIES */}
+          {/* ================================================================ */}
+          {activeTab === "notifications" && (
+            <div className="space-y-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Email thông báo</h2>
+                  <p className="text-gray-500 text-sm mt-0.5">Theo dõi trạng thái gửi email từ notification service và retry các email lỗi.</p>
+                </div>
+                <button
+                  onClick={fetchEmailDeliveries}
+                  disabled={emailDeliveriesLoading}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+                >
+                  <RotateCcw className={`w-4 h-4 ${emailDeliveriesLoading ? "animate-spin" : ""}`} />
+                  <span>Làm mới</span>
+                </button>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="inline-flex w-fit rounded-xl bg-gray-100 p-1">
+                  {["FAILED", "PENDING", "SENT"].map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setEmailDeliveryStatusFilter(status)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        emailDeliveryStatusFilter === status
+                          ? "bg-white text-blue-600 shadow-sm"
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Số dòng</label>
+                  <select
+                    value={emailDeliverySize}
+                    onChange={(event) => setEmailDeliverySize(Number(event.target.value))}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              {emailDeliveriesError && (
+                <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-center space-x-3 text-red-800 text-sm shadow-sm">
+                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                  <span className="font-medium">{emailDeliveriesError}</span>
+                </div>
+              )}
+
+              {emailDeliveriesLoading ? (
+                <div className="flex flex-col justify-center items-center py-20 bg-white rounded-2xl border border-gray-100">
+                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                  <span className="text-sm text-gray-400 mt-3">Đang tải danh sách email...</span>
+                </div>
+              ) : emailDeliveries.length === 0 ? (
+                <div className="py-20 text-center text-gray-400 space-y-3 bg-white rounded-2xl border border-gray-100">
+                  <Mail className="w-12 h-12 mx-auto text-gray-300" />
+                  <p className="text-sm">Không có email nào ở trạng thái {emailDeliveryStatusFilter}.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-gray-400 font-semibold text-xs uppercase bg-gray-50/50">
+                          <th className="py-4 px-6">Người nhận</th>
+                          <th className="py-4 px-6">Nội dung</th>
+                          <th className="py-4 px-6">Trạng thái</th>
+                          <th className="py-4 px-6">Retry</th>
+                          <th className="py-4 px-6">Thời gian</th>
+                          <th className="py-4 px-6 text-right">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {emailDeliveries.map((delivery) => (
+                          <tr key={delivery.deliveryId} className="hover:bg-gray-50/30 transition-colors align-top">
+                            <td className="py-4 px-6">
+                              <p className="font-bold text-gray-900">{delivery.recipientEmail || "N/A"}</p>
+                              <p className="text-[10px] text-gray-400 font-mono mt-1">ID: {delivery.deliveryId}</p>
+                            </td>
+                            <td className="py-4 px-6 max-w-sm">
+                              <p className="font-semibold text-gray-900">{delivery.subject || "Không có tiêu đề"}</p>
+                              <p className="text-xs text-gray-500 mt-1">Template: {delivery.templateName || "N/A"}</p>
+                              {delivery.lastError && (
+                                <p className="text-xs text-rose-600 mt-2 line-clamp-2">{delivery.lastError}</p>
+                              )}
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold ${getEmailDeliveryStatusClass(delivery.status)}`}>
+                                {delivery.status}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6 text-gray-700 font-semibold">
+                              {delivery.retryCount ?? 0}
+                            </td>
+                            <td className="py-4 px-6 text-xs text-gray-500 space-y-1">
+                              <p>Tạo: {formatDateTime(delivery.createdAt)}</p>
+                              {delivery.nextAttemptAt && <p>Gửi lại: {formatDateTime(delivery.nextAttemptAt)}</p>}
+                              {delivery.sentAt && <p>Đã gửi: {formatDateTime(delivery.sentAt)}</p>}
+                              {delivery.failedAt && <p>Lỗi: {formatDateTime(delivery.failedAt)}</p>}
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <button
+                                onClick={() => handleRetryEmailDelivery(delivery.deliveryId)}
+                                disabled={retryingDeliveryId === delivery.deliveryId || delivery.status === "PENDING"}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-xs font-bold disabled:opacity-50 disabled:hover:bg-transparent"
+                              >
+                                {retryingDeliveryId === delivery.deliveryId ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="w-4 h-4" />
+                                )}
+                                <span>Retry</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* TAB 5: RISK INPUT SCHEMA */}
           {/* ================================================================ */}
           {activeTab === "risk-schemas" && (
             <RiskSchemaTab products={products} triggerToast={triggerToast} />
           )}
 
           {/* ================================================================ */}
-          {/* TAB 5: OCCUPATION RISK MAPPING */}
+          {/* TAB 6: OCCUPATION RISK MAPPING */}
           {/* ================================================================ */}
           {activeTab === "occupation-mappings" && (
             <OccupationMappingTab products={products} triggerToast={triggerToast} />

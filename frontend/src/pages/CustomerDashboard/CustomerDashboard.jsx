@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { authService } from "../../services/authService";
 import { customerService } from "../../services/customerService";
 import ProductsTab from "./ProductsTab";
 import InsuredPersonsTab from "./InsuredPersonsTab";
+import Pagination from "../../components/Pagination";
 import {
   LayoutDashboard,
   FileText,
@@ -26,7 +27,12 @@ import {
   AlertCircle,
   CalendarDays,
   ReceiptText,
-  RefreshCw
+  RefreshCw,
+  Archive,
+  CheckCheck,
+  Inbox,
+  ClipboardList,
+  Activity
 } from "lucide-react";
 
 export default function CustomerDashboard() {
@@ -41,6 +47,7 @@ export default function CustomerDashboard() {
       case "/contracts": return "contracts";
       case "/insured-persons": return "insured-persons";
       case "/payments": return "payments";
+      case "/claims": return "claims";
       case "/notifications": return "notifications";
       case "/profile": return "profile";
       case "/support": return "support";
@@ -77,17 +84,57 @@ export default function CustomerDashboard() {
   const [contracts, setContracts] = useState([]);
   const [contractsLoading, setContractsLoading] = useState(true);
   const [contractsError, setContractsError] = useState("");
+
+  const [claims, setClaims] = useState([]);
+  const [claimsLoading, setClaimsLoading] = useState(false);
+  const [claimsError, setClaimsError] = useState("");
   
   // Notifications state
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState("");
+  const [notificationStatusFilter, setNotificationStatusFilter] = useState("");
+  const [notificationPage, setNotificationPage] = useState(1);
+  const [notificationPageSize, setNotificationPageSize] = useState(10);
+  const [notificationTotalPages, setNotificationTotalPages] = useState(1);
+  const [notificationTotalItems, setNotificationTotalItems] = useState(0);
+  const [notificationActionId, setNotificationActionId] = useState("");
 
   // Interaction / Modal state
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState("");
 
+  const loadNotifications = useCallback(async ({ status = "", page = 1, size = 10 } = {}) => {
+    setNotificationsLoading(true);
+    setNotificationsError("");
+    try {
+      const [notificationsData, unreadCount] = await Promise.all([
+        customerService.getNotifications({
+          status: status || undefined,
+          page: Math.max(0, page - 1),
+          size
+        }),
+        customerService.getUnreadNotificationCount()
+      ]);
+
+      const items = notificationsData?.content || notificationsData?.items || [];
+      setNotifications(items);
+      setNotificationTotalItems(notificationsData?.totalElements ?? items.length);
+      setNotificationTotalPages(notificationsData?.totalPages ?? Math.max(1, Math.ceil(items.length / size)));
+      setUnreadNotificationsCount(unreadCount);
+    } catch (error) {
+      console.error("Failed to load notifications", error);
+      setNotificationsError("Không thể tải thông báo từ máy chủ.");
+      setNotifications([]);
+      setUnreadNotificationsCount(0);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, []);
+
   // Fetch all initial data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setProfileLoading(true);
       setContractsLoading(true);
@@ -108,13 +155,11 @@ export default function CustomerDashboard() {
       setContracts(contractsData || []);
       setContractsLoading(false);
 
+      const claimHistory = await customerService.getClaimHistory();
+      setClaims(claimHistory || []);
+
       // 3. Get notifications
-      const notifs = await customerService.getNotifications();
-      setNotifications(notifs || []);
-      
-      // Calculate unread count
-      const unreads = notifs.filter(n => n.status === "UNREAD" || !n.readAt).length;
-      setUnreadNotificationsCount(unreads);
+      await loadNotifications({ status: "", page: 1, size: 10 });
     } catch (error) {
       console.error("Failed to load dashboard data", error);
       setProfileError("Không thể đồng bộ dữ liệu từ máy chủ.");
@@ -122,7 +167,7 @@ export default function CustomerDashboard() {
       setProfileLoading(false);
       setContractsLoading(false);
     }
-  };
+  }, [loadNotifications]);
 
   useEffect(() => {
     let alive = true;
@@ -132,7 +177,24 @@ export default function CustomerDashboard() {
     }
     loadDashboard();
     return () => { alive = false; };
-  }, []);
+  }, [fetchData]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadActiveNotifications() {
+      if (activeTab !== "notifications") return;
+      await Promise.resolve();
+      if (alive) {
+        loadNotifications({
+          status: notificationStatusFilter,
+          page: notificationPage,
+          size: notificationPageSize
+        });
+      }
+    }
+    loadActiveNotifications();
+    return () => { alive = false; };
+  }, [activeTab, notificationStatusFilter, notificationPage, notificationPageSize, loadNotifications]);
 
 
   const handleUpdateProfile = async (e) => {
@@ -196,6 +258,76 @@ export default function CustomerDashboard() {
     }
   };
 
+  const reloadClaims = async () => {
+    try {
+      setClaimsLoading(true);
+      setClaimsError("");
+      const claimHistory = await customerService.getClaimHistory();
+      setClaims(claimHistory || []);
+    } catch (error) {
+      console.error("Failed to reload claim history", error);
+      setClaimsError("Không thể tải lịch sử bồi thường.");
+    } finally {
+      setClaimsLoading(false);
+    }
+  };
+
+  const handleNotificationStatusChange = (status) => {
+    setNotificationStatusFilter(status);
+    setNotificationPage(1);
+  };
+
+  const handleMarkNotificationRead = async (notificationId) => {
+    try {
+      setNotificationActionId(notificationId);
+      await customerService.markNotificationRead(notificationId);
+      await loadNotifications({
+        status: notificationStatusFilter,
+        page: notificationPage,
+        size: notificationPageSize
+      });
+    } catch (error) {
+      console.error("Failed to mark notification as read", error);
+      setNotificationsError("Không thể đánh dấu thông báo đã đọc.");
+    } finally {
+      setNotificationActionId("");
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      setNotificationActionId("read-all");
+      await customerService.markAllNotificationsRead();
+      await loadNotifications({
+        status: notificationStatusFilter,
+        page: notificationPage,
+        size: notificationPageSize
+      });
+    } catch (error) {
+      console.error("Failed to mark all notifications as read", error);
+      setNotificationsError("Không thể đánh dấu tất cả thông báo đã đọc.");
+    } finally {
+      setNotificationActionId("");
+    }
+  };
+
+  const handleArchiveNotification = async (notificationId) => {
+    try {
+      setNotificationActionId(`archive-${notificationId}`);
+      await customerService.archiveNotification(notificationId);
+      await loadNotifications({
+        status: notificationStatusFilter,
+        page: notificationPage,
+        size: notificationPageSize
+      });
+    } catch (error) {
+      console.error("Failed to archive notification", error);
+      setNotificationsError("Không thể lưu trữ thông báo.");
+    } finally {
+      setNotificationActionId("");
+    }
+  };
+
 
   // Helper mapping productType values
   const getProductDisplayName = (type) => {
@@ -239,6 +371,30 @@ export default function CustomerDashboard() {
   };
 
   const formatDate = (value) => value || "Chưa hiệu lực";
+
+  const formatDateTime = (value) => {
+    if (!value) return "Gần đây";
+    return new Date(value).toLocaleString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
+  };
+
+  const isNotificationUnread = (notification) => (
+    notification?.status === "UNREAD" || (!notification?.readAt && notification?.status !== "ARCHIVED")
+  );
+
+  const getNotificationStatusLabel = (status) => {
+    switch ((status || "").toUpperCase()) {
+      case "UNREAD": return "Chưa đọc";
+      case "READ": return "Đã đọc";
+      case "ARCHIVED": return "Đã lưu trữ";
+      default: return status || "Không rõ";
+    }
+  };
 
   const getContractStatusLabel = (status) => {
     switch ((status || "").toUpperCase()) {
@@ -304,12 +460,36 @@ export default function CustomerDashboard() {
       : "bg-rose-50 text-rose-700 border-rose-100"
   );
 
+  const getSeverityLabel = (severity) => {
+    switch ((severity || "").toUpperCase()) {
+      case "LOW": return "Nhẹ";
+      case "MEDIUM": return "Trung bình";
+      case "HIGH": return "Nghiêm trọng";
+      default: return severity || "Chưa phân loại";
+    }
+  };
+
+  const getSeverityClass = (severity) => {
+    switch ((severity || "").toUpperCase()) {
+      case "LOW":
+        return "bg-emerald-50 text-emerald-700 border-emerald-100";
+      case "MEDIUM":
+        return "bg-amber-50 text-amber-700 border-amber-100";
+      case "HIGH":
+        return "bg-rose-50 text-rose-700 border-rose-100";
+      default:
+        return "bg-gray-100 text-gray-600 border-gray-200";
+    }
+  };
+
   // Helpers to calculate stats
   const activeContracts = contracts.filter(c => c.status === "ACTIVE" || c.status === "ISSUED");
   
   // Pending payment contract (usually status PENDING_PAYMENT or unpaid)
   const pendingPaymentContracts = contracts.filter(c => !isPaymentCompleted(c.paymentStatus) && c.status !== "ACTIVE");
   const totalUnpaidAmount = pendingPaymentContracts.reduce((sum, c) => sum + (c.quotedPremium || 0), 0);
+  const totalClaimAmount = claims.reduce((sum, claim) => sum + Number(claim.claimAmount || 0), 0);
+  const medicalServiceCount = claims.reduce((sum, claim) => sum + Number(claim.nMedicalServices || 0), 0);
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex text-gray-800 font-sans">
@@ -389,6 +569,18 @@ export default function CustomerDashboard() {
             >
               <CreditCard className="w-5 h-5" />
               <span>Thanh toán</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("claims")}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                activeTab === "claims"
+                  ? "bg-blue-50 text-blue-600 shadow-sm"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              <ClipboardList className="w-5 h-5" />
+              <span>Lịch sử bồi thường</span>
             </button>
 
             <button
@@ -673,38 +865,23 @@ export default function CustomerDashboard() {
                     </div>
 
                     {notifications.length === 0 ? (
-                      <div className="space-y-3 py-2">
-                        {/* Static/mock notifications fallback */}
-                        <div className="flex items-start space-x-3 text-xs">
-                          <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                            <HeartPulse className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-900">Yêu cầu bồi thường #CLM2024/001 đang được xử lý</p>
-                            <p className="text-gray-400 text-[10px] mt-0.5">Cập nhật mới nhất 2 giờ trước</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start space-x-3 text-xs">
-                          <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
-                            <Bell className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-900">Hợp đồng An Tâm Sức Khỏe sắp đến hạn thanh toán</p>
-                            <p className="text-gray-400 text-[10px] mt-0.5">Hạn thanh toán: 01/06/2024</p>
-                          </div>
-                        </div>
+                      <div className="py-8 text-center text-gray-400">
+                        <Inbox className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                        <p className="text-xs">Chưa có thông báo mới.</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
                         {notifications.slice(0, 2).map((n) => (
                           <div key={n.notificationId} className="flex items-start space-x-3 text-xs">
-                            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              isNotificationUnread(n) ? "bg-blue-50 text-blue-600" : "bg-gray-50 text-gray-400"
+                            }`}>
                                 <Bell className="w-4 h-4" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="font-semibold text-gray-900 truncate">{n.title || "Thông báo hệ thống"}</p>
                               <p className="text-gray-500 text-[10px] truncate mt-0.5">{n.message}</p>
+                              <p className="text-gray-400 text-[10px] mt-0.5">{formatDateTime(n.createdAt)}</p>
                             </div>
                           </div>
                         ))}
@@ -946,74 +1123,288 @@ export default function CustomerDashboard() {
           )}
 
           {/* ================================================================ */}
-          {/* TAB 6: NOTIFICATIONS */}
+          {/* TAB 6: CLAIM HISTORY */}
           {/* ================================================================ */}
-          {activeTab === "notifications" && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
-              <div className="flex justify-between items-center">
+          {activeTab === "claims" && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900">Hộp thư thông báo</h3>
-                  <p className="text-xs text-gray-500">Nhận các cập nhật mới nhất về hợp đồng, sự kiện bồi thường và nhắc phí</p>
+                  <h3 className="text-2xl font-bold text-gray-900">Lịch sử bồi thường</h3>
+                  <p className="text-sm text-gray-500 mt-1">Theo dõi các hồ sơ claim và lịch sử sử dụng dịch vụ y tế đã ghi nhận.</p>
+                </div>
+                <button
+                  onClick={reloadClaims}
+                  disabled={claimsLoading}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+                >
+                  <RefreshCw className={`w-4 h-4 ${claimsLoading ? "animate-spin" : ""}`} />
+                  <span>Làm mới</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <ClipboardList className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Tổng hồ sơ</p>
+                  <p className="text-3xl font-extrabold text-gray-900 mt-2">{claims.length}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                    <ReceiptText className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Tổng tiền bồi thường</p>
+                  <p className="text-2xl font-extrabold text-gray-900 mt-2">{formatMoney(totalClaimAmount)}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <Activity className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Lượt dịch vụ y tế</p>
+                  <p className="text-3xl font-extrabold text-gray-900 mt-2">{medicalServiceCount}</p>
                 </div>
               </div>
 
-              {notifications.length === 0 ? (
-                <div className="space-y-4">
-                  {/* Local mock notifications */}
-                  <div className="p-4 bg-gray-50 rounded-xl flex items-start space-x-3 text-sm">
-                    <Bell className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-gray-900">Chào mừng bạn gia nhập InsuCare</h4>
-                      <p className="text-gray-600 mt-1">Cảm ơn bạn đã lựa chọn sử dụng dịch vụ của chúng tôi. Hãy hoàn thiện hồ sơ để có trải nghiệm tính toán giá bảo hiểm nhanh nhất!</p>
-                      <span className="text-[10px] text-gray-400 block mt-2">01/06/2024</span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-gray-50 rounded-xl flex items-start space-x-3 text-sm">
-                    <Bell className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-gray-900">Báo cáo kiểm định hồ sơ bồi thường #CLM2024/001</h4>
-                      <p className="text-gray-600 mt-1">Chúng tôi đã tiếp nhận hồ sơ yêu cầu nằm viện An Tâm Sức Khỏe của bạn. Quá trình kiểm định sẽ hoàn tất trong tối đa 3 ngày làm việc.</p>
-                      <span className="text-[10px] text-gray-400 block mt-2">04/06/2024</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {notifications.map((n) => (
-                    <div 
-                      key={n.notificationId} 
-                      className={`p-4 rounded-xl flex items-start space-x-3 text-sm transition-all border ${
-                        n.readAt || n.status === "READ"
-                          ? "bg-white border-gray-100" 
-                          : "bg-blue-50/50 border-blue-100"
-                      }`}
-                    >
-                      <Bell className={`w-5 h-5 shrink-0 mt-0.5 ${n.readAt || n.status === "READ" ? "text-gray-400" : "text-blue-500"}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start gap-4">
-                          <h4 className="font-bold text-gray-900 truncate">{n.title || "Thông báo từ InsuCare"}</h4>
-                          {!(n.readAt || n.status === "READ") && (
-                            <button
-                              onClick={async () => {
-                                await customerService.markNotificationRead(n.notificationId);
-                                fetchData(); // reload count
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-700 font-bold hover:underline shrink-0"
-                            >
-                              Đánh dấu đã đọc
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-gray-600 mt-1">{n.message}</p>
-                        <span className="text-[10px] text-gray-400 block mt-2">
-                          {n.createdAt ? new Date(n.createdAt).toLocaleString("vi-VN") : "Gần đây"}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+              {claimsError && (
+                <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-center space-x-3 text-red-800 text-sm shadow-sm">
+                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                  <span className="font-medium">{claimsError}</span>
                 </div>
               )}
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                {claimsLoading ? (
+                  <div className="flex flex-col justify-center items-center py-20">
+                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                    <span className="text-sm text-gray-400 mt-3">Đang tải lịch sử bồi thường...</span>
+                  </div>
+                ) : claims.length === 0 ? (
+                  <div className="py-20 text-center text-gray-400 space-y-3">
+                    <ClipboardList className="w-12 h-12 mx-auto text-gray-300" />
+                    <div>
+                      <h4 className="text-base font-bold text-gray-700">Chưa có claim nào</h4>
+                      <p className="text-sm mt-1">Khi phát sinh bồi thường hoặc sử dụng dịch vụ, dữ liệu sẽ xuất hiện tại đây.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-gray-400 font-semibold text-xs uppercase bg-gray-50/50">
+                          <th className="py-4 px-6">Ngày phát sinh</th>
+                          <th className="py-4 px-6">Sản phẩm</th>
+                          <th className="py-4 px-6">Số tiền</th>
+                          <th className="py-4 px-6">Dịch vụ</th>
+                          <th className="py-4 px-6">Mức độ</th>
+                          <th className="py-4 px-6">Nguồn</th>
+                          <th className="py-4 px-6">Mã hồ sơ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {claims.map((claim) => (
+                          <tr key={claim.recordId} className="hover:bg-gray-50/40 transition-colors">
+                            <td className="py-4 px-6 font-bold text-gray-900">{claim.experienceDate || "N/A"}</td>
+                            <td className="py-4 px-6">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
+                                {getProductDisplayName(claim.productType)}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6 font-extrabold text-rose-600">{formatMoney(claim.claimAmount)}</td>
+                            <td className="py-4 px-6 text-gray-700 font-semibold">{claim.nMedicalServices || 0}</td>
+                            <td className="py-4 px-6">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold ${getSeverityClass(claim.severityLevel)}`}>
+                                {getSeverityLabel(claim.severityLevel)}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6 text-gray-600">{claim.source || "SYSTEM"}</td>
+                            <td className="py-4 px-6">
+                              <p className="font-mono text-xs text-gray-500">{claim.recordId}</p>
+                              {claim.contractId && (
+                                <p className="font-mono text-[10px] text-gray-400 mt-1">HĐ {claim.contractId}</p>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* TAB 7: NOTIFICATIONS */}
+          {/* ================================================================ */}
+          {activeTab === "notifications" && (
+            <div className="space-y-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Hộp thư thông báo</h3>
+                  <p className="text-sm text-gray-500 mt-1">Theo dõi cập nhật về hợp đồng, thanh toán và hồ sơ bảo hiểm.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => loadNotifications({
+                      status: notificationStatusFilter,
+                      page: notificationPage,
+                      size: notificationPageSize
+                    })}
+                    disabled={notificationsLoading}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${notificationsLoading ? "animate-spin" : ""}`} />
+                    <span>Làm mới</span>
+                  </button>
+                  <button
+                    onClick={handleMarkAllNotificationsRead}
+                    disabled={unreadNotificationsCount === 0 || notificationActionId === "read-all"}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-colors"
+                  >
+                    {notificationActionId === "read-all" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+                    <span>Đọc tất cả</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Chưa đọc</p>
+                  <p className="text-3xl font-extrabold text-blue-600 mt-2">{unreadNotificationsCount}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Tổng theo bộ lọc</p>
+                  <p className="text-3xl font-extrabold text-gray-900 mt-2">{notificationTotalItems}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Trang hiện tại</p>
+                  <p className="text-3xl font-extrabold text-gray-900 mt-2">{notificationPage}/{notificationTotalPages}</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="inline-flex w-fit rounded-xl bg-gray-100 p-1">
+                    {[
+                      { value: "", label: "Tất cả" },
+                      { value: "UNREAD", label: "Chưa đọc" },
+                      { value: "READ", label: "Đã đọc" },
+                      { value: "ARCHIVED", label: "Lưu trữ" }
+                    ].map((item) => (
+                      <button
+                        key={item.value}
+                        onClick={() => handleNotificationStatusChange(item.value)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                          notificationStatusFilter === item.value
+                            ? "bg-white text-blue-600 shadow-sm"
+                            : "text-gray-500 hover:text-gray-900"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  {notificationsError && (
+                    <div className="flex items-center gap-2 text-sm text-rose-600">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{notificationsError}</span>
+                    </div>
+                  )}
+                </div>
+
+                {notificationsLoading ? (
+                  <div className="flex flex-col justify-center items-center py-20">
+                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                    <span className="text-sm text-gray-400 mt-3">Đang tải thông báo...</span>
+                  </div>
+                ) : notifications.length === 0 ? (
+                  <div className="py-20 text-center text-gray-400 space-y-3">
+                    <Inbox className="w-12 h-12 mx-auto text-gray-300" />
+                    <div>
+                      <h4 className="text-base font-bold text-gray-700">Không có thông báo</h4>
+                      <p className="text-sm mt-1">Các cập nhật mới sẽ xuất hiện tại đây.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {notifications.map((n) => (
+                      <div
+                        key={n.notificationId}
+                        className={`p-5 flex items-start gap-4 transition-colors ${
+                          isNotificationUnread(n) ? "bg-blue-50/40" : "bg-white hover:bg-gray-50/60"
+                        }`}
+                      >
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          isNotificationUnread(n) ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-400"
+                        }`}>
+                          <Bell className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="font-bold text-gray-900 truncate">{n.title || "Thông báo từ InsuCare"}</h4>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  isNotificationUnread(n)
+                                    ? "bg-blue-50 text-blue-700 border-blue-100"
+                                    : n.status === "ARCHIVED"
+                                      ? "bg-gray-100 text-gray-600 border-gray-200"
+                                      : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                }`}>
+                                  {getNotificationStatusLabel(n.status)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1 leading-6">{n.message}</p>
+                              <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-400">
+                                <span>{formatDateTime(n.createdAt)}</span>
+                                {n.eventType && <span className="font-mono">{n.eventType}</span>}
+                                {n.channelPolicy && <span>{n.channelPolicy}</span>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isNotificationUnread(n) && (
+                                <button
+                                  onClick={() => handleMarkNotificationRead(n.notificationId)}
+                                  disabled={notificationActionId === n.notificationId}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-colors disabled:opacity-60"
+                                  title="Đánh dấu đã đọc"
+                                >
+                                  {notificationActionId === n.notificationId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                                  <span>Đã đọc</span>
+                                </button>
+                              )}
+                              {n.status !== "ARCHIVED" && (
+                                <button
+                                  onClick={() => handleArchiveNotification(n.notificationId)}
+                                  disabled={notificationActionId === `archive-${n.notificationId}`}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-xs font-bold transition-colors disabled:opacity-60"
+                                  title="Lưu trữ thông báo"
+                                >
+                                  {notificationActionId === `archive-${n.notificationId}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                                  <span>Lưu trữ</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Pagination
+                  currentPage={notificationPage}
+                  totalPages={notificationTotalPages}
+                  onPageChange={setNotificationPage}
+                  pageSize={notificationPageSize}
+                  onPageSizeChange={(size) => {
+                    setNotificationPageSize(size);
+                    setNotificationPage(1);
+                  }}
+                  totalItems={notificationTotalItems}
+                />
+              </div>
             </div>
           )}
 

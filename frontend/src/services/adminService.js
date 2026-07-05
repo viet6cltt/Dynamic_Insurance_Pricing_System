@@ -108,4 +108,20 @@ export const adminService = {
   updateOccupationRiskMappingStatus: async (mappingId, status) => {
     return axiosClient.patch(`/admin/occupation-risk-mappings/${mappingId}/status`, { status });
   },
+
+  // --- Notification Email Delivery Management ---
+  getEmailDeliveries: async ({ status = "FAILED", size = 50 } = {}) => {
+    try {
+      const params = new URLSearchParams({ size });
+      if (status) params.append("status", status);
+      return await axiosClient.get(`/notifications/admin/email-deliveries?${params}`);
+    } catch (error) {
+      console.error("Failed to fetch notification email deliveries", error);
+      throw error;
+    }
+  },
+
+  retryEmailDelivery: async (deliveryId) => {
+    return axiosClient.post(`/notifications/admin/email-deliveries/${deliveryId}/retry`);
+  },
 };
