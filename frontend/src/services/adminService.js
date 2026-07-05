@@ -35,14 +35,19 @@ export const adminService = {
   },
 
   // --- Coverage Plan Management ---
-  getCoveragePlans: async (productId) => {
+  getCoveragePlans: async (productId, status = null) => {
     try {
-      const response = await axiosClient.get(`/products/${productId}/coverage-plans`);
+      const params = status ? `?status=${status}` : "";
+      const response = await axiosClient.get(`/products/${productId}/coverage-plans${params}`);
       return response.items || response.content || response || [];
     } catch (error) {
       console.error(`Failed to fetch coverage plans for product ${productId}`, error);
       throw error;
     }
+  },
+
+  getCoveragePlanById: async (planId) => {
+    return axiosClient.get(`/coverage-plans/${planId}`);
   },
 
   createCoveragePlan: async (productId, planData) => {

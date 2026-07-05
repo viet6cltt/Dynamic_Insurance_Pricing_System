@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { authService } from "../../services/authService";
 import { customerService } from "../../services/customerService";
+import ProductsTab from "./ProductsTab";
+import InsuredPersonsTab from "./InsuredPersonsTab";
 import {
   LayoutDashboard,
   FileText,
@@ -15,16 +17,16 @@ import {
   LogOut,
   Menu,
   CheckCircle,
-  AlertCircle,
-  Clock,
   ArrowRight,
   ChevronRight,
-  Plus,
-  Activity,
   Car,
   ShieldCheck,
   Send,
-  Loader2
+  Loader2,
+  AlertCircle,
+  CalendarDays,
+  ReceiptText,
+  RefreshCw
 } from "lucide-react";
 
 export default function CustomerDashboard() {
@@ -34,9 +36,10 @@ export default function CustomerDashboard() {
 
   // Map pathname to activeTab
   const getActiveTabFromPathname = (pathname) => {
+    if (pathname.startsWith("/products")) return "products";
     switch (pathname) {
       case "/contracts": return "contracts";
-      case "/products": return "products";
+      case "/insured-persons": return "insured-persons";
       case "/payments": return "payments";
       case "/notifications": return "notifications";
       case "/profile": return "profile";
@@ -73,11 +76,8 @@ export default function CustomerDashboard() {
   // Contracts & stats state
   const [contracts, setContracts] = useState([]);
   const [contractsLoading, setContractsLoading] = useState(true);
+  const [contractsError, setContractsError] = useState("");
   
-  // Available Products state
-  const [products, setProducts] = useState([]);
-  const [productsLoading, setProductsLoading] = useState(false);
-
   // Notifications state
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
@@ -85,13 +85,13 @@ export default function CustomerDashboard() {
   // Interaction / Modal state
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState("");
-  const [selectedContractForPayment, setSelectedContractForPayment] = useState(null);
 
   // Fetch all initial data
   const fetchData = async () => {
     try {
       setProfileLoading(true);
       setContractsLoading(true);
+      setContractsError("");
 
       // 1. Get profile
       const profileData = await authService.getUserProfile();
@@ -118,33 +118,22 @@ export default function CustomerDashboard() {
     } catch (error) {
       console.error("Failed to load dashboard data", error);
       setProfileError("Không thể đồng bộ dữ liệu từ máy chủ.");
+      setContractsError("Không thể tải danh sách hợp đồng.");
       setProfileLoading(false);
       setContractsLoading(false);
     }
   };
 
-  // Load products when products tab opens
-  const fetchProducts = async () => {
-    try {
-      setProductsLoading(true);
-      const data = await customerService.getProducts();
-      setProducts(data || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setProductsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchData();
+    let alive = true;
+    async function loadDashboard() {
+      await Promise.resolve();
+      if (alive) fetchData();
+    }
+    loadDashboard();
+    return () => { alive = false; };
   }, []);
 
-  useEffect(() => {
-    if (activeTab === "products") {
-      fetchProducts();
-    }
-  }, [activeTab]);
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -174,23 +163,12 @@ export default function CustomerDashboard() {
     navigate("/login");
   };
 
-  // Trigger Mock Payment
   const handlePayContract = async (contract) => {
     try {
       setPaymentLoading(true);
       setPaymentSuccessMsg("");
-      
-      const payload = {
-        contractId: contract.contractId,
-        quoteId: contract.quoteId || "00000000-0000-0000-0000-000000000000",
-        customerId: profile?.userId || user?.id,
-        amount: contract.quotedPremium,
-        currency: "VND",
-        paymentMethod: "CREDIT_CARD",
-        simulateResult: "SUCCESS"
-      };
 
-      await customerService.mockPay(payload);
+      await customerService.payContract(contract.contractId);
       setPaymentSuccessMsg(`Thanh toán hợp đồng ${getProductDisplayName(contract.productType)} thành công!`);
       
       // Reload contracts to reflect paid status
@@ -201,7 +179,20 @@ export default function CustomerDashboard() {
       alert("Thanh toán thất bại. Vui lòng thử lại.");
     } finally {
       setPaymentLoading(false);
-      setSelectedContractForPayment(null);
+    }
+  };
+
+  const reloadContracts = async () => {
+    try {
+      setContractsLoading(true);
+      setContractsError("");
+      const updatedContracts = await customerService.getContracts();
+      setContracts(updatedContracts || []);
+    } catch (err) {
+      console.error("Failed to reload contracts", err);
+      setContractsError("Không thể tải danh sách hợp đồng.");
+    } finally {
+      setContractsLoading(false);
     }
   };
 
@@ -242,98 +233,83 @@ export default function CustomerDashboard() {
     }
   };
 
+  const formatMoney = (value) => {
+    if (value === null || value === undefined) return "Chưa có";
+    return `${Number(value).toLocaleString("vi-VN")}đ`;
+  };
+
+  const formatDate = (value) => value || "Chưa hiệu lực";
+
+  const getContractStatusLabel = (status) => {
+    switch ((status || "").toUpperCase()) {
+      case "ACTIVE":
+      case "ISSUED":
+        return "Đang hiệu lực";
+      case "PENDING_PAYMENT":
+        return "Chờ thanh toán";
+      case "PENDING":
+      case "SUBMITTED":
+        return "Đang xử lý";
+      case "EXPIRED":
+        return "Hết hiệu lực";
+      case "CANCELLED":
+      case "CANCELED":
+        return "Đã hủy";
+      default:
+        return status || "Chưa xác định";
+    }
+  };
+
+  const getContractStatusClass = (status) => {
+    switch ((status || "").toUpperCase()) {
+      case "ACTIVE":
+      case "ISSUED":
+        return "bg-emerald-50 text-emerald-700 border-emerald-100";
+      case "PENDING_PAYMENT":
+      case "PENDING":
+      case "SUBMITTED":
+        return "bg-amber-50 text-amber-700 border-amber-100";
+      case "EXPIRED":
+      case "CANCELLED":
+      case "CANCELED":
+        return "bg-gray-100 text-gray-600 border-gray-200";
+      default:
+        return "bg-blue-50 text-blue-700 border-blue-100";
+    }
+  };
+
+  const getPaymentStatusLabel = (status) => {
+    switch ((status || "").toUpperCase()) {
+      case "PAID":
+      case "SUCCESS":
+        return "Đã thanh toán";
+      case "UNPAID":
+      case "PENDING":
+        return "Chưa thanh toán";
+      case "FAILED":
+        return "Thanh toán lỗi";
+      default:
+        return status || "Chưa thanh toán";
+    }
+  };
+
+  const isPaymentCompleted = (status) => {
+    const normalized = (status || "").toUpperCase();
+    return normalized === "PAID" || normalized === "SUCCESS";
+  };
+
+  const getPaymentStatusClass = (status) => (
+    isPaymentCompleted(status)
+      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+      : "bg-rose-50 text-rose-700 border-rose-100"
+  );
+
   // Helpers to calculate stats
   const activeContracts = contracts.filter(c => c.status === "ACTIVE" || c.status === "ISSUED");
   
   // Pending payment contract (usually status PENDING_PAYMENT or unpaid)
-  const pendingPaymentContracts = contracts.filter(c => c.paymentStatus === "UNPAID" || c.paymentStatus === "PENDING" || c.status === "PENDING_PAYMENT");
+  const pendingPaymentContracts = contracts.filter(c => !isPaymentCompleted(c.paymentStatus) && c.status !== "ACTIVE");
   const totalUnpaidAmount = pendingPaymentContracts.reduce((sum, c) => sum + (c.quotedPremium || 0), 0);
-
-  // Fast Mock Contract Creator (helpful when DB is empty for demo)
-  const [creatingDemo, setCreatingDemo] = useState(false);
-  const handleCreateDemoContracts = async () => {
-    setCreatingDemo(true);
-    try {
-      const demoData = [
-        {
-          productType: "HEALTH",
-          typePolicy: "INDIVIDUAL",
-          quotedPremium: 5200000,
-          basePremium: 5000000,
-          sumInsured: 200000000,
-          effectiveDate: "2024-06-01",
-          expiryDate: "2025-05-31",
-          status: "PENDING_PAYMENT",
-          paymentStatus: "UNPAID"
-        },
-        {
-          productType: "CAR",
-          typePolicy: "CAR_COMPREHENSIVE",
-          quotedPremium: 3800000,
-          basePremium: 3500000,
-          sumInsured: 500000000,
-          effectiveDate: "2024-04-15",
-          expiryDate: "2025-04-14",
-          status: "ACTIVE",
-          paymentStatus: "PAID"
-        },
-        {
-          productType: "LIFE",
-          typePolicy: "FAMILY_CARE",
-          quotedPremium: 3450000,
-          basePremium: 3200000,
-          sumInsured: 300000000,
-          effectiveDate: "2024-03-10",
-          expiryDate: "2025-03-09",
-          status: "ACTIVE",
-          paymentStatus: "PAID"
-        }
-      ];
-
-      // Request API Client to create
-      for (const contract of demoData) {
-        await customerService.createContract(contract);
-      }
-
-      // Reload
-      const updatedContracts = await customerService.getContracts();
-      setContracts(updatedContracts || []);
-    } catch (err) {
-      console.error("Failed to seed demo contracts", err);
-      // Fallback local mock in UI if BE error
-      setContracts([
-        {
-          contractId: "demo-h1",
-          productType: "HEALTH",
-          quotedPremium: 5200000,
-          effectiveDate: "2024-06-01",
-          expiryDate: "2025-05-31",
-          status: "PENDING_PAYMENT",
-          paymentStatus: "UNPAID"
-        },
-        {
-          contractId: "demo-h2",
-          productType: "CAR",
-          quotedPremium: 3800000,
-          effectiveDate: "2024-04-15",
-          expiryDate: "2025-04-14",
-          status: "ACTIVE",
-          paymentStatus: "PAID"
-        },
-        {
-          contractId: "demo-h3",
-          productType: "LIFE",
-          quotedPremium: 3450000,
-          effectiveDate: "2024-03-10",
-          expiryDate: "2025-03-09",
-          status: "ACTIVE",
-          paymentStatus: "PAID"
-        }
-      ]);
-    } finally {
-      setCreatingDemo(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex text-gray-800 font-sans">
@@ -388,6 +364,18 @@ export default function CustomerDashboard() {
             >
               <Shield className="w-5 h-5" />
               <span>Sản phẩm bảo hiểm</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("insured-persons")}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                activeTab === "insured-persons"
+                  ? "bg-blue-50 text-blue-600 shadow-sm"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              <User className="w-5 h-5" />
+              <span>Người được bảo hiểm</span>
             </button>
 
 
@@ -518,17 +506,13 @@ export default function CustomerDashboard() {
                   <p className="text-gray-500 text-sm mt-0.5">Chào mừng bạn quay trở lại với InsuCare</p>
                 </div>
 
-                {/* Seeder helper (Show only if no contracts are loaded) */}
-                {contracts.length === 0 && !contractsLoading && (
-                  <button
-                    onClick={handleCreateDemoContracts}
-                    disabled={creatingDemo}
-                    className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-50"
-                  >
-                    {creatingDemo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    <span>Tạo dữ liệu hợp đồng mẫu</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => handleTabChange("products")}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
+                >
+                  <Shield className="w-4 h-4" />
+                  <span>Đăng ký bảo hiểm</span>
+                </button>
               </div>
 
               {/* 2 Summary Stats Cards */}
@@ -739,96 +723,150 @@ export default function CustomerDashboard() {
           {/* TAB 2: MY CONTRACTS */}
           {/* ================================================================ */}
           {activeTab === "contracts" && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
-              <div className="flex justify-between items-center">
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900">Danh sách hợp đồng của tôi</h3>
-                  <p className="text-xs text-gray-500">Quản lý và theo dõi các gói hợp đồng bảo hiểm đã đăng ký</p>
+                  <h3 className="text-2xl font-bold text-gray-900">Hợp đồng của tôi</h3>
+                  <p className="text-sm text-gray-500 mt-1">Theo dõi trạng thái hợp đồng, thời hạn hiệu lực và phí cần thanh toán.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={reloadContracts}
+                    disabled={contractsLoading}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${contractsLoading ? "animate-spin" : ""}`} />
+                    <span>Làm mới</span>
+                  </button>
+                  <button
+                    onClick={() => handleTabChange("products")}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                  >
+                    <Shield className="w-4 h-4" />
+                    <span>Đăng ký gói mới</span>
+                  </button>
                 </div>
               </div>
 
               {contractsLoading ? (
-                <div className="flex flex-col justify-center items-center py-20">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center items-center py-20">
                   <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
                   <span className="text-sm text-gray-400 mt-3">Đang tải danh sách hợp đồng...</span>
                 </div>
+              ) : contractsError ? (
+                <div className="bg-white rounded-2xl border border-rose-100 shadow-sm p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">Không tải được hợp đồng</h4>
+                      <p className="text-sm text-gray-500 mt-1">{contractsError}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={reloadContracts}
+                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-semibold transition-colors"
+                  >
+                    Thử lại
+                  </button>
+                </div>
               ) : contracts.length === 0 ? (
-                <div className="py-20 text-center text-gray-400 space-y-4">
-                  <p className="text-sm">Bạn chưa có hợp đồng nào trong danh sách.</p>
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-20 px-6 text-center space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                    <FileText className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold text-gray-900">Chưa có hợp đồng nào</h4>
+                    <p className="text-sm text-gray-500 mt-1">Sau khi chấp nhận báo giá và tạo hợp đồng, hợp đồng sẽ xuất hiện ở đây.</p>
+                  </div>
                   <button
                     onClick={() => handleTabChange("products")}
-                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
                   >
-                    Đăng ký sản phẩm ngay
+                    Xem sản phẩm bảo hiểm
                   </button>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-gray-400 font-semibold text-xs uppercase bg-gray-50/50">
-                        <th className="py-3.5 px-4 rounded-l-xl">Sản phẩm</th>
-                        <th className="py-3.5 px-4">Số HĐ</th>
-                        <th className="py-3.5 px-4">Thời hạn</th>
-                        <th className="py-3.5 px-4">Số tiền bảo hiểm</th>
-                        <th className="py-3.5 px-4">Phí thường niên</th>
-                        <th className="py-3.5 px-4">Thanh toán</th>
-                        <th className="py-3.5 px-4 rounded-r-xl">Trạng thái</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {contracts.map((c) => (
-                        <tr key={c.contractId} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="py-4 px-4 font-semibold text-gray-900">
-                            <div className="flex items-center space-x-2.5">
-                              <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
-                                {getProductIcon(c.productType)}
-                              </span>
-                              <span>{getProductDisplayName(c.productType)}</span>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Tổng hợp đồng</p>
+                      <p className="text-3xl font-extrabold text-gray-900 mt-2">{contracts.length}</p>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Đang hiệu lực</p>
+                      <p className="text-3xl font-extrabold text-emerald-600 mt-2">{activeContracts.length}</p>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cần thanh toán</p>
+                      <p className="text-2xl font-extrabold text-rose-600 mt-2">{formatMoney(totalUnpaidAmount)}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    {contracts.map((c) => (
+                      <div key={c.contractId} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${getProductIconBg(c.productType)}`}>
+                              {getProductIcon(c.productType)}
                             </div>
-                          </td>
-                          <td className="py-4 px-4 font-mono text-xs text-gray-500">
-                            {c.contractId?.substring(0, 18).toUpperCase()}...
-                          </td>
-                          <td className="py-4 px-4 text-xs text-gray-500">
-                            {c.effectiveDate} - {c.expiryDate}
-                          </td>
-                          <td className="py-4 px-4 font-bold text-gray-900">
-                            {(c.sumInsured || 200000000).toLocaleString("vi-VN")}đ
-                          </td>
-                          <td className="py-4 px-4 font-bold text-gray-900">
-                            {(c.quotedPremium || 0).toLocaleString("vi-VN")}đ
-                          </td>
-                          <td className="py-4 px-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                              c.paymentStatus === "PAID"
-                                ? "bg-green-50 text-green-700"
-                                : "bg-red-50 text-red-700"
-                            }`}>
-                              {c.paymentStatus === "PAID" ? "Đã trả" : "Chưa trả"}
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-gray-900 truncate">{getProductDisplayName(c.productType)}</h4>
+                              <p className="text-xs font-mono text-gray-400 mt-1 break-all">HĐ {c.contractId}</p>
+                            </div>
+                          </div>
+                          <span className={`shrink-0 inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-semibold ${getContractStatusClass(c.status)}`}>
+                            {getContractStatusLabel(c.status)}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="rounded-xl bg-gray-50 p-3">
+                            <p className="text-xs text-gray-500">Phí thường niên</p>
+                            <p className="font-extrabold text-gray-900 mt-1">{formatMoney(c.quotedPremium)}</p>
+                          </div>
+                          <div className="rounded-xl bg-gray-50 p-3">
+                            <p className="text-xs text-gray-500">Số tiền bảo hiểm</p>
+                            <p className="font-extrabold text-gray-900 mt-1">{formatMoney(c.sumInsured)}</p>
+                          </div>
+                          <div className="rounded-xl bg-gray-50 p-3">
+                            <p className="text-xs text-gray-500">Ngày hiệu lực</p>
+                            <p className="font-bold text-gray-900 mt-1">{formatDate(c.effectiveDate)}</p>
+                          </div>
+                          <div className="rounded-xl bg-gray-50 p-3">
+                            <p className="text-xs text-gray-500">Ngày kết thúc</p>
+                            <p className="font-bold text-gray-900 mt-1">{formatDate(c.expiryDate)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${getPaymentStatusClass(c.paymentStatus)}`}>
+                              <ReceiptText className="w-3.5 h-3.5" />
+                              {getPaymentStatusLabel(c.paymentStatus)}
                             </span>
-                            {c.paymentStatus !== "PAID" && (
-                              <button
-                                onClick={() => handlePayContract(c)}
-                                className="ml-2.5 text-xs text-blue-600 hover:text-blue-700 font-bold underline"
-                              >
-                                Trả ngay
-                              </button>
-                            )}
-                          </td>
-                          <td className="py-4 px-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                              c.status === "ACTIVE" || c.status === "ISSUED"
-                                ? "bg-green-50 text-green-700"
-                                : "bg-amber-50 text-amber-700"
-                            }`}>
-                              {c.status === "ACTIVE" || c.status === "ISSUED" ? "Hiệu lực" : "Chờ xử lý"}
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-600 text-xs font-semibold">
+                              <CalendarDays className="w-3.5 h-3.5" />
+                              Năm hợp đồng {c.policyYear || 1}
                             </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </div>
+
+                          {!isPaymentCompleted(c.paymentStatus) && c.status !== "ACTIVE" && (
+                            <button
+                              onClick={() => handlePayContract(c)}
+                              disabled={paymentLoading}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-colors"
+                            >
+                              {paymentLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                              <span>Thanh toán phí</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -838,64 +876,19 @@ export default function CustomerDashboard() {
           {/* TAB 3: INSURANCE PRODUCTS */}
           {/* ================================================================ */}
           {activeTab === "products" && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">Các gói sản phẩm bảo hiểm</h3>
-                <p className="text-xs text-gray-500">Khám phá các gói sản phẩm bảo hiểm linh hoạt bảo vệ tối ưu cho bạn</p>
-              </div>
+            <ProductsTab
+              onRegisterSuccess={() => {
+                // Reload contracts after successful registration
+                customerService.getContracts().then(data => setContracts(data || []));
+              }}
+            />
+          )}
 
-              {productsLoading ? (
-                <div className="flex flex-col justify-center items-center py-20">
-                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                  <span className="text-sm text-gray-400 mt-3">Đang tải sản phẩm bảo hiểm...</span>
-                </div>
-              ) : products.length === 0 ? (
-                <div className="py-12 bg-white rounded-2xl border border-gray-100 text-center text-gray-400">
-                  Không tìm thấy sản phẩm nào được định nghĩa trên hệ thống.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {products.map((p) => (
-                    <div key={p.productId} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
-                      <div>
-                        {/* Display Product Image if url exists, else render placeholder */}
-                        {p.imageUrl ? (
-                          <img
-                            src={p.imageUrl}
-                            alt={p.name}
-                            className="w-full h-40 object-cover border-b border-gray-100"
-                          />
-                        ) : (
-                          <div className={`w-full h-40 flex items-center justify-center ${getProductIconBg(p.productType)}`}>
-                            {getProductIcon(p.productType)}
-                          </div>
-                        )}
-                        <div className="p-6 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                              {p.productType}
-                            </span>
-                          </div>
-                          <h4 className="text-base font-bold text-gray-900">{p.name}</h4>
-                          <p className="text-xs text-gray-500 line-clamp-3">{p.description}</p>
-                        </div>
-                      </div>
-
-                      <div className="p-6 pt-0">
-                        <button
-                          onClick={() => {
-                            alert("Chức năng đang phát triển. Quý khách vui lòng liên hệ tư vấn để được hỗ trợ báo giá và kích hoạt.");
-                          }}
-                          className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-colors"
-                        >
-                          Tìm hiểu chi tiết
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {/* ================================================================ */}
+          {/* TAB 4: INSURED PERSONS */}
+          {/* ================================================================ */}
+          {activeTab === "insured-persons" && (
+            <InsuredPersonsTab />
           )}
 
 
@@ -909,7 +902,7 @@ export default function CustomerDashboard() {
                 <p className="text-xs text-gray-500">Danh sách các hóa đơn đóng phí bảo hiểm thường niên của quý khách</p>
               </div>
 
-              {contracts.filter(c => c.paymentStatus === "PAID").length === 0 ? (
+              {contracts.filter(c => isPaymentCompleted(c.paymentStatus)).length === 0 ? (
                 <div className="py-12 text-center text-gray-400">
                   Chưa ghi nhận bất kỳ giao dịch thanh toán nào từ tài khoản này.
                 </div>
@@ -926,7 +919,7 @@ export default function CustomerDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {contracts.filter(c => c.paymentStatus === "PAID").map((c) => (
+                      {contracts.filter(c => isPaymentCompleted(c.paymentStatus)).map((c) => (
                         <tr key={c.contractId} className="hover:bg-gray-50/50 transition-colors">
                           <td className="py-4 px-4 font-bold text-gray-900">
                             {getProductDisplayName(c.productType)}

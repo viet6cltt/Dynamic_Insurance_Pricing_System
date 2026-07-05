@@ -1,28 +1,126 @@
 import axiosClient from "./axiosClient";
 
 export const customerService = {
+  // ── Contracts ──────────────────────────────────────────────────────────────
   getContracts: async () => {
     return axiosClient.get("/contracts/me");
   },
 
-  getNotifications: async () => {
+  getContractById: async (contractId) => {
+    return axiosClient.get(`/contracts/${contractId}`);
+  },
+
+  createContract: async (payload) => {
+    // payload: { quoteId, insuredPersonId, productId, coveragePlanId, simulatePaymentResult? }
+    return axiosClient.post("/contracts", payload);
+  },
+
+  payContract: async (contractId) => {
+    return axiosClient.post(`/contracts/${contractId}/pay`);
+  },
+
+  // ── Insured Persons ────────────────────────────────────────────────────────
+  getMyInsuredPersons: async ({ page = 0, size = 20, status } = {}) => {
+    const params = new URLSearchParams({ page, size });
+    if (status) params.append("status", status);
+    return axiosClient.get(`/insured-persons/me?${params}`);
+  },
+
+  getInsuredPersonById: async (insuredPersonId) => {
+    return axiosClient.get(`/insured-persons/${insuredPersonId}`);
+  },
+
+  createInsuredPerson: async (payload) => {
+    // { fullName, dateOfBirth, gender, identityNumber, relationshipToOwner, linkedUserProfileId? }
+    return axiosClient.post("/insured-persons", payload);
+  },
+
+  updateInsuredPerson: async (insuredPersonId, payload) => {
+    return axiosClient.put(`/insured-persons/${insuredPersonId}`, payload);
+  },
+
+  deactivateInsuredPerson: async (insuredPersonId) => {
+    return axiosClient.delete(`/insured-persons/${insuredPersonId}`);
+  },
+
+  // ── Pricing / Quotes ───────────────────────────────────────────────────────
+  createQuote: async (payload) => {
+    // { insuredPersonId, productId, coveragePlanId, riskProfile: JsonNode }
+    return axiosClient.post("/pricing/quotes", payload);
+  },
+
+  getQuoteById: async (quoteId) => {
+    return axiosClient.get(`/pricing/quotes/${quoteId}`);
+  },
+
+  getMyQuotes: async () => {
+    return axiosClient.get("/pricing/quotes/me");
+  },
+
+  acceptQuote: async (quoteId) => {
+    return axiosClient.post(`/pricing/quotes/${quoteId}/accept`);
+  },
+
+  // ── Products (GET /products) ───────────────────────────────────────────────
+  getProducts: async ({ productType, status, page = 0, size = 20 } = {}) => {
     try {
-      const response = await axiosClient.get("/notifications");
-      // Handle Spring Page/PagedResponse structure
+      const params = new URLSearchParams({ page, size });
+      if (productType) params.append("productType", productType);
+      if (status) params.append("status", status);
+      return await axiosClient.get(`/products?${params}`);
+    } catch (error) {
+      console.error("Failed to fetch products", error);
+      return { items: [], totalElements: 0, totalPages: 0, page: 0, size };
+    }
+  },
+
+  getProductById: async (productId) => {
+    return axiosClient.get(`/products/${productId}`);
+  },
+
+  // ── Risk Input Schema ──────────────────────────────────────────────────────
+  getRiskInputSchemaByProduct: async (productId) => {
+    return axiosClient.get(`/products/${productId}/risk-input-schema`);
+  },
+
+  getRiskInputSchemaByProductType: async (productType) => {
+    return axiosClient.get(`/risk-input-schemas/by-product-type/${productType}`);
+  },
+
+  getOccupationRiskMappings: async (productId, status = "ACTIVE") => {
+    try {
+      const params = status ? `?status=${status}` : "";
+      const response = await axiosClient.get(`/products/${productId}/occupation-risk-mappings${params}`);
       return response.items || response.content || response || [];
     } catch (error) {
-      console.error("Failed to fetch notifications", error);
+      console.error(`Failed to fetch occupation risk mappings for product ${productId}`, error);
       return [];
     }
   },
 
-  getProducts: async () => {
+  // ── Coverage Plans ─────────────────────────────────────────────────────────
+  getCoveragePlansByProduct: async (productId, status = null) => {
     try {
-      const response = await axiosClient.get("/products");
-      // GET /products returns paged list, we extract content
+      const params = status ? `?status=${status}` : "";
+      const response = await axiosClient.get(`/products/${productId}/coverage-plans${params}`);
       return response.items || response.content || response || [];
     } catch (error) {
-      console.error("Failed to fetch products", error);
+      console.error(`Failed to fetch coverage plans for product ${productId}`, error);
+      return [];
+    }
+  },
+
+  getCoveragePlanById: async (coveragePlanId) => {
+    return axiosClient.get(`/coverage-plans/${coveragePlanId}`);
+  },
+
+  // ── Notifications ──────────────────────────────────────────────────────────
+  getNotifications: async () => {
+    try {
+      const response = await axiosClient.get("/notifications");
+      return response.items || response.content || response || [];
+    } catch (error) {
+      console.error("Failed to fetch notifications", error);
       return [];
     }
   },
@@ -31,11 +129,12 @@ export const customerService = {
     return axiosClient.patch(`/notifications/${notificationId}/read`);
   },
 
+  // ── Payments ───────────────────────────────────────────────────────────────
   mockPay: async (paymentData) => {
     return axiosClient.post("/payments/mock", paymentData);
   },
 
-  createContract: async (contractData) => {
-    return axiosClient.post("/contracts", contractData);
-  }
+  getPaymentById: async (paymentId) => {
+    return axiosClient.get(`/payments/${paymentId}`);
+  },
 };

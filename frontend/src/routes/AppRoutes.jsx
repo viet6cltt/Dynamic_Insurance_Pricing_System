@@ -1,7 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { authService } from "../services/authService";
 import Login from "../pages/Login/Login";
 import Register from "../pages/Register/Register";
 import OAuth2Callback from "../pages/Auth/OAuth2Callback";
@@ -70,6 +68,22 @@ export default function AppRoutes() {
               <CustomerDashboard />
             </ProtectedRoute>
           } 
+        />
+        <Route
+          path="/products/:productId"
+          element={
+            <ProtectedRoute>
+              <CustomerDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/insured-persons"
+          element={
+            <ProtectedRoute>
+              <CustomerDashboard />
+            </ProtectedRoute>
+          }
         />
         <Route 
           path="/payments" 

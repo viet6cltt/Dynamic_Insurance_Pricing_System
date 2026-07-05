@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { adminService } from "../../services/adminService";
@@ -12,9 +12,7 @@ import {
   LogOut,
   Plus,
   Edit2,
-  Image,
   Upload,
-  Save,
   X,
   CheckCircle,
   AlertCircle,
@@ -45,7 +43,12 @@ export default function AdminDashboard() {
   const handleTabChange = (tabName) => {
     if (tabName === "overview") {
       navigate("/admin");
+    } else if (tabName === "plans") {
+      setProductPage(1);
+      setPlanPage(1);
+      navigate("/admin/coverage-plans");
     } else {
+      setProductPage(1);
       navigate(`/admin/${tabName}`);
     }
   };
@@ -53,7 +56,7 @@ export default function AdminDashboard() {
   const NAV_ITEMS = [
     { id: "overview",             label: "Tổng quan",                icon: LayoutDashboard },
     { id: "products",             label: "Sản phẩm bảo hiểm",        icon: Shield },
-    { id: "plans",                label: "Kế hoạch bảo hiểm",        icon: Layers },
+    { id: "plans",                label: "Các gói bảo hiểm",         icon: Layers },
     { id: "risk-schemas",         label: "Risk Input Schema",         icon: FileCode2 },
     { id: "occupation-mappings",  label: "Occupation Risk Mapping",   icon: Briefcase },
   ];
@@ -72,6 +75,7 @@ export default function AdminDashboard() {
   const [plansLoading, setPlansLoading] = useState(false);
   const [plansError, setPlansError] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
+  const [planStatusFilter, setPlanStatusFilter] = useState("");
 
   // --- Toast/Banners ---
   const [successMsg, setSuccessMsg] = useState("");
@@ -97,8 +101,6 @@ export default function AdminDashboard() {
   });
   const [productSubmitting, setProductSubmitting] = useState(false);
   const [modalImageFile, setModalImageFile] = useState(null);
-  const [imageFiles, setImageFiles] = useState({}); // { [productId]: File }
-  const [imageUploading, setImageUploading] = useState({}); // { [productId]: boolean }
 
   // --- Coverage Plan Modals & Forms ---
   const [planModalOpen, setPlanModalOpen] = useState(false);
@@ -113,7 +115,7 @@ export default function AdminDashboard() {
   const [planSubmitting, setPlanSubmitting] = useState(false);
 
   // --- Fetch Products ---
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setProductsLoading(true);
     setProductsError("");
     try {
@@ -122,41 +124,49 @@ export default function AdminDashboard() {
       if (data.length > 0 && !selectedProductId) {
         setSelectedProductId(data[0].productId);
       }
-    } catch (err) {
+    } catch {
       setProductsError("Không thể tải danh sách sản phẩm.");
     } finally {
       setProductsLoading(false);
     }
-  };
+  }, [selectedProductId, setSelectedProductId]);
 
   // --- Fetch Coverage Plans for selected product ---
-  const fetchCoveragePlans = async (prodId) => {
+  const fetchCoveragePlans = useCallback(async (prodId, status = planStatusFilter) => {
     if (!prodId) return;
     setPlansLoading(true);
     setPlansError("");
     try {
-      const data = await adminService.getCoveragePlans(prodId);
+      const data = await adminService.getCoveragePlans(prodId, status || null);
       setPlans(data);
-    } catch (err) {
-      setPlansError("Không thể tải danh sách kế hoạch bảo hiểm.");
+    } catch {
+      setPlansError("Không thể tải danh sách gói bảo hiểm.");
     } finally {
       setPlansLoading(false);
     }
-  };
+  }, [planStatusFilter]);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "plans" && selectedProductId) {
-      fetchCoveragePlans(selectedProductId);
+    let alive = true;
+    async function loadProducts() {
+      await Promise.resolve();
+      if (alive) fetchProducts();
     }
-  }, [activeTab, selectedProductId]);
+    loadProducts();
+    return () => { alive = false; };
+  }, [fetchProducts]);
 
-  // Reset trang khi chuyển tab hoặc thay đổi product
-  useEffect(() => { setProductPage(1); }, [activeTab]);
-  useEffect(() => { setPlanPage(1); }, [selectedProductId, activeTab]);
+  useEffect(() => {
+    let alive = true;
+    async function loadPlans() {
+      await Promise.resolve();
+      if (alive && activeTab === "plans" && selectedProductId) {
+        fetchCoveragePlans(selectedProductId, planStatusFilter);
+      }
+    }
+    loadPlans();
+    return () => { alive = false; };
+  }, [activeTab, selectedProductId, planStatusFilter, fetchCoveragePlans]);
 
   const triggerToast = (msg, isError = false) => {
     if (isError) {
@@ -238,7 +248,7 @@ export default function AdminDashboard() {
       await adminService.updateProductStatus(product.productId, newStatus);
       triggerToast(`Đã chuyển trạng thái sản phẩm sang ${newStatus}!`);
       fetchProducts();
-    } catch (err) {
+    } catch {
       triggerToast("Cập nhật trạng thái thất bại.", true);
     }
   };
@@ -258,22 +268,28 @@ export default function AdminDashboard() {
     setPlanModalOpen(true);
   };
 
-  const handleOpenPlanEdit = (plan) => {
-    setEditingPlan(plan);
-    setPlanForm({
-      planName: plan.planName || "",
-      description: plan.description || "",
-      basePremium: plan.basePremium?.toString() || "",
-      sumInsured: plan.sumInsured?.toString() || "",
-      status: plan.status || "ACTIVE"
-    });
-    setPlanModalOpen(true);
+  const handleOpenPlanEdit = async (plan) => {
+    setPlansError("");
+    try {
+      const detail = await adminService.getCoveragePlanById(plan.coveragePlanId);
+      setEditingPlan(detail);
+      setPlanForm({
+        planName: detail.planName || "",
+        description: detail.description || "",
+        basePremium: detail.basePremium?.toString() || "",
+        sumInsured: detail.sumInsured?.toString() || "",
+        status: detail.status || "ACTIVE"
+      });
+      setPlanModalOpen(true);
+    } catch {
+      triggerToast("Không thể tải chi tiết gói bảo hiểm.", true);
+    }
   };
 
   const handlePlanSubmit = async (e) => {
     e.preventDefault();
     if (!selectedProductId) {
-      triggerToast("Vui lòng chọn một sản phẩm trước khi tạo kế hoạch bảo hiểm.", true);
+      triggerToast("Vui lòng chọn một sản phẩm trước khi tạo gói bảo hiểm.", true);
       return;
     }
     setPlanSubmitting(true);
@@ -288,14 +304,14 @@ export default function AdminDashboard() {
 
       if (editingPlan) {
         await adminService.updateCoveragePlan(editingPlan.coveragePlanId, payload);
-        triggerToast("Cập nhật kế hoạch bảo hiểm thành công!");
+        triggerToast("Cập nhật gói bảo hiểm thành công!");
       } else {
         await adminService.createCoveragePlan(selectedProductId, payload);
-        triggerToast("Thêm kế hoạch bảo hiểm mới thành công!");
+        triggerToast("Thêm gói bảo hiểm mới thành công!");
       }
       setPlanModalOpen(false);
-      fetchCoveragePlans(selectedProductId);
-    } catch (err) {
+      fetchCoveragePlans(selectedProductId, planStatusFilter);
+    } catch {
       triggerToast("Thao tác thất bại. Vui lòng kiểm tra lại thông tin nhập.", true);
     } finally {
       setPlanSubmitting(false);
@@ -306,9 +322,9 @@ export default function AdminDashboard() {
     const newStatus = plan.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
       await adminService.updateCoveragePlanStatus(plan.coveragePlanId, newStatus);
-      triggerToast(`Đã chuyển trạng thái kế hoạch sang ${newStatus}!`);
-      fetchCoveragePlans(selectedProductId);
-    } catch (err) {
+      triggerToast(`Đã chuyển trạng thái gói bảo hiểm sang ${newStatus}!`);
+      fetchCoveragePlans(selectedProductId, planStatusFilter);
+    } catch {
       triggerToast("Cập nhật trạng thái thất bại.", true);
     }
   };
@@ -588,6 +604,12 @@ export default function AdminDashboard() {
                 </div>
                 );
               })()}
+              {productsError && (
+                <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-center space-x-3 text-red-800 text-sm shadow-sm">
+                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                  <span className="font-medium">{productsError}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -599,7 +621,7 @@ export default function AdminDashboard() {
               
               <div className="flex justify-between items-center flex-wrap gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Quản lý kế hoạch bảo hiểm (Coverage Plan)</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Quản lý các gói bảo hiểm</h2>
                   <p className="text-gray-500 text-sm mt-0.5">Quy định mức phí đóng cơ bản và số tiền được bảo hiểm</p>
                 </div>
                 {selectedProductId && (
@@ -608,7 +630,7 @@ export default function AdminDashboard() {
                     className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
                   >
                     <Plus className="w-4.5 h-4.5" />
-                    <span>Thêm kế hoạch mới</span>
+                    <span>Thêm gói mới</span>
                   </button>
                 )}
               </div>
@@ -617,24 +639,48 @@ export default function AdminDashboard() {
               <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Chọn sản phẩm bảo hiểm liên kết</label>
-                  <p className="text-xs text-gray-500">Kế hoạch bảo hiểm sẽ được thêm vào sản phẩm này</p>
+                  <p className="text-xs text-gray-500">Các gói bảo hiểm sẽ được thêm vào sản phẩm này</p>
                 </div>
-                <select
-                  value={selectedProductId}
-                  onChange={(e) => setSelectedProductId(e.target.value)}
-                  className="bg-gray-50 border border-gray-250 rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[280px]"
-                >
-                  {products.length === 0 ? (
-                    <option value="">(Không có sản phẩm nào)</option>
-                  ) : (
-                    products.map((p) => (
-                      <option key={p.productId} value={p.productId}>
-                        [{getProductTypeLabel(p.productType)}] {p.name}
-                      </option>
-                    ))
-                  )}
-                </select>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <select
+                    value={selectedProductId}
+                    onChange={(e) => {
+                      setSelectedProductId(e.target.value);
+                      setPlanPage(1);
+                    }}
+                    className="bg-gray-50 border border-gray-250 rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[280px]"
+                  >
+                    {products.length === 0 ? (
+                      <option value="">(Không có sản phẩm nào)</option>
+                    ) : (
+                      products.map((p) => (
+                        <option key={p.productId} value={p.productId}>
+                          [{getProductTypeLabel(p.productType)}] {p.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <select
+                    value={planStatusFilter}
+                    onChange={(e) => {
+                      setPlanStatusFilter(e.target.value);
+                      setPlanPage(1);
+                    }}
+                    className="bg-gray-50 border border-gray-250 rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="ACTIVE">Đang áp dụng</option>
+                    <option value="INACTIVE">Tạm dừng</option>
+                  </select>
+                </div>
               </div>
+
+              {plansError && (
+                <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-center space-x-3 text-red-800 text-sm shadow-sm">
+                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                  <span className="font-medium">{plansError}</span>
+                </div>
+              )}
 
               {/* Plans Table list */}
               {!selectedProductId ? (
@@ -644,16 +690,16 @@ export default function AdminDashboard() {
               ) : plansLoading ? (
                 <div className="flex flex-col justify-center items-center py-20 bg-white rounded-2xl border border-gray-100">
                   <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                  <span className="text-sm text-gray-400 mt-3">Đang tải danh sách kế hoạch...</span>
+                  <span className="text-sm text-gray-400 mt-3">Đang tải danh sách gói bảo hiểm...</span>
                 </div>
               ) : plans.length === 0 ? (
                 <div className="py-20 text-center text-gray-400 space-y-4 bg-white rounded-2xl border border-gray-100">
-                  <p className="text-sm">Sản phẩm này hiện tại chưa có kế hoạch bảo hiểm nào.</p>
+                  <p className="text-sm">Sản phẩm này hiện tại chưa có gói bảo hiểm nào.</p>
                   <button
                     onClick={handleOpenPlanCreate}
                     className="px-4 py-2 border border-blue-100 text-blue-600 bg-blue-50/50 hover:bg-blue-50 rounded-xl text-xs font-bold transition-all"
                   >
-                    Thêm kế hoạch đầu tiên
+                    Thêm gói đầu tiên
                   </button>
                 </div>
               ) : (() => {
@@ -666,7 +712,7 @@ export default function AdminDashboard() {
                     <table className="w-full border-collapse text-left text-sm">
                       <thead>
                         <tr className="border-b border-gray-100 text-gray-400 font-semibold text-xs uppercase bg-gray-50/50">
-                          <th className="py-4 px-6">Tên kế hoạch</th>
+                          <th className="py-4 px-6">Tên gói bảo hiểm</th>
                           <th className="py-4 px-6">Mô tả quyền lợi</th>
                           <th className="py-4 px-6">Phí đóng cơ bản</th>
                           <th className="py-4 px-6">Số tiền bảo hiểm</th>
@@ -890,7 +936,7 @@ export default function AdminDashboard() {
             
             <div className="p-6 border-b border-gray-150 flex justify-between items-center bg-gray-50">
               <h3 className="text-lg font-bold text-gray-900">
-                {editingPlan ? "Cập nhật kế hoạch bảo hiểm" : "Thêm kế hoạch bảo hiểm mới"}
+                {editingPlan ? "Cập nhật gói bảo hiểm" : "Thêm gói bảo hiểm mới"}
               </h3>
               <button 
                 onClick={() => setPlanModalOpen(false)}
@@ -904,7 +950,7 @@ export default function AdminDashboard() {
               
               {/* Plan Name */}
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Tên gói / kế hoạch</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Tên gói bảo hiểm</label>
                 <input
                   type="text"
                   required
@@ -955,7 +1001,7 @@ export default function AdminDashboard() {
 
               {/* Status */}
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Trạng thái kế hoạch</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Trạng thái gói bảo hiểm</label>
                 <select
                   value={planForm.status}
                   onChange={(e) => setPlanForm({ ...planForm, status: e.target.value })}
@@ -981,7 +1027,7 @@ export default function AdminDashboard() {
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-bold transition-all flex items-center justify-center space-x-1.5 shadow-sm"
                 >
                   {planSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>{editingPlan ? "Lưu thay đổi" : "Thêm kế hoạch"}</span>
+                  <span>{editingPlan ? "Lưu thay đổi" : "Thêm gói"}</span>
                 </button>
               </div>
 
