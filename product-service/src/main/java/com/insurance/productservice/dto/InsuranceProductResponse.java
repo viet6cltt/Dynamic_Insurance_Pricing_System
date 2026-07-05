@@ -9,6 +9,7 @@ public record InsuranceProductResponse(
     String name,
     String description,
     String status,
+    String imageUrl,
     Instant createdAt,
     Instant updatedAt
 ) {}

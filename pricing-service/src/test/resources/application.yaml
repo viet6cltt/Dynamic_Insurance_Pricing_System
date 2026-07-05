@@ -23,3 +23,16 @@ app:
     ai-model-service-url: http://localhost:8000
   outbox:
     publisher-enabled: false
+  currency:
+    vnd-per-eur: 25000
+  rating:
+    health-risk-log-alpha: 0.18
+    health-factor-min: 0.85
+    health-factor-max: 1.40
+    portfolio-factor-min: 0.85
+    portfolio-factor-max: 1.30
+    portfolio-credibility-k: 3.0
+    portfolio-neutral-prev-cost-claims-year-eur: 222.2
+    portfolio-neutral-prev-n-medical-services: 7.0
+    portfolio-neutral-prev-had-claim-or-service: false
+    portfolio-neutral-claim-free-previous-year: false

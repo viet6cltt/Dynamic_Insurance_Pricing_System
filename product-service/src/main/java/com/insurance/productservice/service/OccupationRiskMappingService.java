@@ -1,5 +1,6 @@
 package com.insurance.productservice.service;
 
+import com.insurance.productservice.config.CacheConfig;
 import com.insurance.productservice.dto.CreateOccupationRiskMappingRequest;
 import com.insurance.productservice.dto.ListResponse;
 import com.insurance.productservice.dto.OccupationRiskMappingResponse;
@@ -10,6 +11,8 @@ import com.insurance.productservice.model.OccupationRiskMapping;
 import com.insurance.productservice.repository.InsuranceProductRepository;
 import com.insurance.productservice.repository.OccupationRiskMappingRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +49,8 @@ public class OccupationRiskMappingService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.OCCUPATION_RISK_CACHE,
+            key = "#productType.toUpperCase() + ':' + #occupationCode.toUpperCase()")
     public ResolveOccupationRiskResponse resolveOccupationRisk(String productType, String occupationCode) {
         if (productType == null || productType.isBlank()) {
             throw new IllegalArgumentException("Product type cannot be null or empty");
@@ -97,6 +102,7 @@ public class OccupationRiskMappingService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.OCCUPATION_RISK_CACHE, allEntries = true)
     public OccupationRiskMappingResponse updateMapping(UUID mappingId, UpdateOccupationRiskMappingRequest request) {
         OccupationRiskMapping mapping = mappingRepository.findById(mappingId)
                 .orElseThrow(() -> new IllegalArgumentException("Occupation mapping not found with ID: " + mappingId));
@@ -115,6 +121,7 @@ public class OccupationRiskMappingService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.OCCUPATION_RISK_CACHE, allEntries = true)
     public OccupationRiskMappingResponse updateMappingStatus(UUID mappingId, String status) {
         if (status == null || status.isBlank()) {
             throw new IllegalArgumentException("Status cannot be null or empty");

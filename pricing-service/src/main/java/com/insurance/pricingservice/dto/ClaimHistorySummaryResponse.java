@@ -8,5 +8,6 @@ public record ClaimHistorySummaryResponse(
     Double prevCostClaimsYear,
     Double prevNMedicalServices,
     Boolean prevHadClaimOrService,
-    Boolean claimFreePreviousYear
+    Boolean claimFreePreviousYear,
+    Double historicalExposureYears
 ) {}

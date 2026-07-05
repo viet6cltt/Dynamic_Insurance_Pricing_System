@@ -3,12 +3,14 @@ package com.insurance.productservice.controller;
 import com.insurance.productservice.dto.*;
 import com.insurance.productservice.service.CoveragePlanService;
 import com.insurance.productservice.service.InsuranceProductService;
+import com.insurance.productservice.service.MinioStorageService;
 import com.insurance.productservice.service.OccupationRiskMappingService;
 import com.insurance.productservice.service.RiskInputSchemaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +24,7 @@ public class AdminProductController {
     private final CoveragePlanService planService;
     private final RiskInputSchemaService schemaService;
     private final OccupationRiskMappingService mappingService;
+    private final MinioStorageService storageService;
 
     // --- Product Admin ---
 
@@ -35,6 +38,14 @@ public class AdminProductController {
             @PathVariable UUID productId,
             @RequestBody UpdateInsuranceProductRequest request) {
         return ResponseEntity.ok(productService.updateProduct(productId, request));
+    }
+
+    @PostMapping("/products/{productId}/image")
+    public ResponseEntity<InsuranceProductResponse> uploadProductImage(
+            @PathVariable UUID productId,
+            @RequestParam("file") MultipartFile file) {
+        String imageUrl = storageService.uploadFile(file);
+        return ResponseEntity.ok(productService.updateProductImageUrl(productId, imageUrl));
     }
 
     @PatchMapping("/products/{productId}/status")

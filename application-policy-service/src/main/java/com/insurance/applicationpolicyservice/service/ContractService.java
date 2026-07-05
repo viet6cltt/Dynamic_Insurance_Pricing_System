@@ -1,8 +1,10 @@
 package com.insurance.applicationpolicyservice.service;
 
 import com.insurance.applicationpolicyservice.dto.*;
+import com.insurance.applicationpolicyservice.model.ClaimExperienceRecord;
 import com.insurance.applicationpolicyservice.model.InsuranceContract;
 import com.insurance.applicationpolicyservice.model.PolicyExperienceSummary;
+import com.insurance.applicationpolicyservice.repository.ClaimExperienceRecordRepository;
 import com.insurance.applicationpolicyservice.repository.InsuranceContractRepository;
 import com.insurance.applicationpolicyservice.repository.PolicyExperienceSummaryRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class ContractService {
 
     private final InsuranceContractRepository contractRepository;
     private final PolicyExperienceSummaryRepository summaryRepository;
+    private final ClaimExperienceRecordRepository claimExperienceRecordRepository;
     private final PricingServiceClient pricingServiceClient;
     private final PaymentServiceClient paymentServiceClient;
 
@@ -37,7 +40,7 @@ public class ContractService {
         try {
             validateResponse = pricingServiceClient.validateQuote(
                     request.quoteId(),
-                    new ValidateQuoteRequest(buyerUserId, request.insuredPersonId(), request.coveragePlanId())
+                    new ValidateQuoteRequest(null, request.insuredPersonId(), request.coveragePlanId())
             );
         } catch (Exception e) {
             log.error("Failed to connect to Pricing Service for quote validation: {}", e.getMessage());
@@ -47,6 +50,13 @@ public class ContractService {
         if (validateResponse == null || !validateResponse.valid()) {
             String reason = validateResponse == null ? "Null response" : "Quote status: " + validateResponse.status();
             throw new IllegalArgumentException("Quote validation failed. Reason: " + reason);
+        }
+
+        if (contractRepository.existsByInsuredPersonIdAndProductId(
+                request.insuredPersonId(),
+                validateResponse.productId())) {
+            throw new IllegalArgumentException(
+                    "Insured person already has a contract related to this insurance product.");
         }
 
         // 2. Initialize contract entity as PAYMENT_PENDING
@@ -116,6 +126,45 @@ public class ContractService {
     }
 
     @Transactional(readOnly = true)
+    public List<ClaimHistoryResponse> getMyClaimHistory(UUID buyerUserId) {
+        return claimExperienceRecordRepository.findByPolicyholderUserIdOrderByExperienceDateDesc(buyerUserId)
+                .stream()
+                .map(this::mapClaimToResponse)
+                .toList();
+    }
+
+    @Transactional
+    public ContractResponse payContract(UUID buyerUserId, UUID contractId) {
+        InsuranceContract contract = contractRepository.findByIdForUpdate(contractId)
+                .orElseThrow(() -> new IllegalArgumentException("Contract not found with ID: " + contractId));
+
+        if (!contract.getApplicantUserId().equals(buyerUserId)) {
+            throw new IllegalArgumentException("Contract does not belong to current user.");
+        }
+
+        if (contract.getStatus() == ContractStatus.ACTIVE) {
+            return mapToResponse(contract);
+        }
+
+        if (contract.getStatus() != ContractStatus.PAYMENT_PENDING
+                && contract.getStatus() != ContractStatus.PAYMENT_FAILED) {
+            throw new IllegalArgumentException("Contract is not payable in status: " + contract.getStatus());
+        }
+
+        contract.setStatus(ContractStatus.PAYMENT_PENDING);
+        PaymentResponse paymentResponse = createPayment(
+                contract,
+                "SUCCESS",
+                "contract-pay-" + contract.getContractId() + "-" + UUID.randomUUID(),
+                "CUSTOMER_PAYMENT"
+        );
+        contract.setPaymentId(paymentResponse.paymentId());
+        contract.setPaymentStatus(paymentResponse.status());
+        InsuranceContract savedContract = contractRepository.save(contract);
+        return mapToResponse(savedContract);
+    }
+
+    @Transactional(readOnly = true)
     public PolicyExperienceSummaryResponse getExperienceSummary(UUID customerId, String productType) {
         log.info("Fetching policy experience summary for customer: {} and product: {}", customerId, productType);
         PolicyExperienceSummary summary = summaryRepository.findByInsuredPersonIdAndProductType(customerId, productType)
@@ -148,13 +197,26 @@ public class ContractService {
                 summary.getPrevCostClaimsYear().doubleValue(),
                 summary.getPrevNMedicalServices().doubleValue(),
                 summary.getPrevHadClaimOrService(),
-                summary.getClaimFreePreviousYear()
+                summary.getClaimFreePreviousYear(),
+                summary.getSeniorityInsured().doubleValue()
         );
     }
 
     // --- Helper Methods ---
 
     private PaymentResponse createPayment(InsuranceContract contract, String simulatePaymentResult) {
+        return createPayment(
+                contract,
+                simulatePaymentResult,
+                "contract-" + contract.getContractId(),
+                "MOCK"
+        );
+    }
+
+    private PaymentResponse createPayment(InsuranceContract contract,
+                                          String simulatePaymentResult,
+                                          String idempotencyKey,
+                                          String paymentMethod) {
         String normalizedSimulateResult = simulatePaymentResult == null || simulatePaymentResult.isBlank()
                 ? "SUCCESS"
                 : simulatePaymentResult;
@@ -164,10 +226,9 @@ public class ContractService {
                 contract.getApplicantUserId(),
                 contract.getQuotedPremium(),
                 "VND",
-                "MOCK",
+                paymentMethod,
                 normalizedSimulateResult
         );
-        String idempotencyKey = "contract-" + contract.getContractId();
         String correlationId = UUID.randomUUID().toString();
         try {
             return paymentServiceClient.createMockPayment(paymentRequest, idempotencyKey, correlationId);
@@ -254,6 +315,23 @@ public class ContractService {
                 c.getPaymentStatus(),
                 c.getCreatedAt(),
                 c.getUpdatedAt()
+        );
+    }
+
+    private ClaimHistoryResponse mapClaimToResponse(ClaimExperienceRecord record) {
+        return new ClaimHistoryResponse(
+                record.getRecordId(),
+                record.getContract() != null ? record.getContract().getContractId() : null,
+                record.getInsuredPersonId(),
+                record.getPolicyholderUserId(),
+                record.getProductType(),
+                record.getExperienceDate(),
+                record.getClaimAmount(),
+                record.getNMedicalServices(),
+                record.getHadClaimOrService(),
+                record.getSeverityLevel(),
+                record.getSource(),
+                record.getImportedAt()
         );
     }
 }

@@ -31,6 +31,9 @@ public class InsuranceProduct {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "image_url")
+    private String imageUrl;
+
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
     private String status = "ACTIVE";

@@ -30,27 +30,29 @@ public class NotificationDefinitionFactory {
         }
 
         JsonNode payload = event.payload();
-        String customerName = defaultIfBlank(profile.fullName(), "Quy khach");
         Map<String, Object> model = baseModel(event, profile);
 
         return switch (event.eventType()) {
             case "payment.created" -> Optional.of(definition(
                     "Yeu cau thanh toan da duoc tao",
-                    "Yeu cau thanh toan " + amount(payload) + " cho hop dong " + text(payload, "contractId") + " da duoc tao.",
+                    "Yeu cau thanh toan " + amount(payload) + " cho hop dong " + text(payload, "contractId")
+                            + " da duoc tao.",
                     ChannelPolicy.IN_APP_AND_EMAIL,
                     "Yeu cau thanh toan bao hiem da duoc tao",
                     "payment-created",
                     model));
             case "payment.succeeded" -> Optional.of(definition(
                     "Thanh toan thanh cong",
-                    "Thanh toan " + amount(payload) + " cho hop dong " + text(payload, "contractId") + " da thanh cong.",
+                    "Thanh toan " + amount(payload) + " cho hop dong " + text(payload, "contractId")
+                            + " da thanh cong.",
                     ChannelPolicy.IN_APP_AND_EMAIL,
                     "Thanh toan bao hiem thanh cong",
                     "payment-succeeded",
                     model));
             case "payment.failed" -> Optional.of(definition(
                     "Thanh toan that bai",
-                    "Thanh toan cho hop dong " + text(payload, "contractId") + " that bai. " + text(payload, "failureReason"),
+                    "Thanh toan cho hop dong " + text(payload, "contractId") + " that bai. "
+                            + text(payload, "failureReason"),
                     ChannelPolicy.IN_APP_AND_EMAIL,
                     "Thanh toan bao hiem that bai",
                     "payment-failed",
@@ -78,7 +80,8 @@ public class NotificationDefinitionFactory {
                     model));
             case "contract.expiring_soon" -> Optional.of(definition(
                     "Hop dong sap het han",
-                    "Hop dong " + text(payload, "contractId") + " se het han sau " + text(payload, "daysUntilExpiry") + " ngay.",
+                    "Hop dong " + text(payload, "contractId") + " se het han sau " + text(payload, "daysUntilExpiry")
+                            + " ngay.",
                     ChannelPolicy.IN_APP_AND_EMAIL,
                     "Hop dong bao hiem sap het han",
                     "contract-expiring-soon",
@@ -109,11 +112,11 @@ public class NotificationDefinitionFactory {
     }
 
     private NotificationDefinition definition(String title,
-                                              String message,
-                                              ChannelPolicy channelPolicy,
-                                              String emailSubject,
-                                              String templateName,
-                                              Map<String, Object> model) {
+            String message,
+            ChannelPolicy channelPolicy,
+            String emailSubject,
+            String templateName,
+            Map<String, Object> model) {
         return new NotificationDefinition(title, message, channelPolicy, emailSubject, templateName, model);
     }
 

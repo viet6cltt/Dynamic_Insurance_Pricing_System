@@ -2,8 +2,8 @@ package com.insurance.pricingservice.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.insurance.pricingservice.dto.QuoteStatus;
 import com.insurance.pricingservice.dto.RiskLevel;
 import com.insurance.pricingservice.model.PremiumQuote;
 import com.insurance.pricingservice.model.PricingAuditLog;
@@ -13,13 +13,12 @@ import com.insurance.pricingservice.repository.PremiumQuoteRepository;
 import com.insurance.pricingservice.repository.PricingAuditLogRepository;
 import com.insurance.pricingservice.repository.PricingExplanationRepository;
 import com.insurance.pricingservice.repository.PricingInputSnapshotRepository;
-import com.insurance.pricingservice.service.*;
 import com.insurance.pricingservice.dto.*;
 import com.insurance.pricingservice.dto.CreateQuoteRequest;
 import com.insurance.pricingservice.dto.ValidateQuoteRequest;
-import com.insurance.pricingservice.dto.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +27,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -52,6 +53,39 @@ public class PricingQuoteService {
     private final PricingOutboxService pricingOutboxService;
     private final ObjectMapper objectMapper;
 
+    @Value("${app.currency.vnd-per-eur:27000}")
+    private double vndPerEur;
+
+    @Value("${app.rating.health-risk-log-alpha:0.18}")
+    private double healthRiskLogAlpha;
+
+    @Value("${app.rating.health-factor-min:0.85}")
+    private double healthFactorMin;
+
+    @Value("${app.rating.health-factor-max:1.50}")
+    private double healthFactorMax;
+
+    @Value("${app.rating.portfolio-factor-min:0.85}")
+    private double portfolioFactorMin;
+
+    @Value("${app.rating.portfolio-factor-max:1.30}")
+    private double portfolioFactorMax;
+
+    @Value("${app.rating.portfolio-credibility-k:3.0}")
+    private double portfolioCredibilityK;
+
+    @Value("${app.rating.portfolio-neutral-prev-cost-claims-year-eur:222.2}")
+    private double neutralPrevCostClaimsYearEur;
+
+    @Value("${app.rating.portfolio-neutral-prev-n-medical-services:7.0}")
+    private double neutralPrevNMedicalServices;
+
+    @Value("${app.rating.portfolio-neutral-prev-had-claim-or-service:false}")
+    private boolean neutralPrevHadClaimOrService;
+
+    @Value("${app.rating.portfolio-neutral-claim-free-previous-year:false}")
+    private boolean neutralClaimFreePreviousYear;
+
     @Transactional
     public QuoteResponse createQuote(UUID buyerAuthUserId, CreateQuoteRequest request) {
         log.info("Creating premium quote for buyer auth user ID: {}", buyerAuthUserId);
@@ -70,11 +104,13 @@ public class PricingQuoteService {
 
         // 3. Verify ownership
         if (!insuredPerson.userId().equals(buyerProfile.userId())) {
-            throw new IllegalArgumentException("Unauthorized: Insured person does not belong to the current buyer profile");
+            throw new IllegalArgumentException(
+                    "Unauthorized: Insured person does not belong to the current buyer profile");
         }
 
         // 4. Fetch coverage plan details from Product Service
-        InternalCoveragePlanResponse coveragePlan = productServiceClient.getInternalCoveragePlan(request.coveragePlanId());
+        InternalCoveragePlanResponse coveragePlan = productServiceClient
+                .getInternalCoveragePlan(request.coveragePlanId());
         if (coveragePlan == null) {
             throw new IllegalArgumentException("Coverage plan not found with ID: " + request.coveragePlanId());
         }
@@ -89,26 +125,35 @@ public class PricingQuoteService {
         double bmi = riskNode != null && riskNode.has("bmi") ? riskNode.get("bmi").asDouble() : 22.5;
         int children = riskNode != null && riskNode.has("children") ? riskNode.get("children").asInt() : 0;
         String smokerStr = parseSmoker(riskNode);
-        double bloodPressure = riskNode != null && riskNode.has("bloodPressure") ? riskNode.get("bloodPressure").asDouble() : 120.0;
-        String exerciseFrequency = riskNode != null && riskNode.has("exerciseFrequency") ? riskNode.get("exerciseFrequency").asText() : "MODERATE";
-        boolean preExistingCondition = riskNode != null && riskNode.has("preExistingCondition") && riskNode.get("preExistingCondition").asBoolean();
+        double bloodPressure = riskNode != null && riskNode.has("bloodPressure")
+                ? riskNode.get("bloodPressure").asDouble()
+                : 120.0;
+        String exerciseFrequency = riskNode != null && riskNode.has("exerciseFrequency")
+                ? riskNode.get("exerciseFrequency").asText()
+                : "MODERATE";
+        boolean preExistingCondition = riskNode != null && riskNode.has("preExistingCondition")
+                && riskNode.get("preExistingCondition").asBoolean();
 
         // 6. Resolve Occupation Risk using internal mapping service
         String occupationRiskLower = "low";
         if (riskNode != null && riskNode.has("occupationCode")) {
             String occupationCode = riskNode.get("occupationCode").asText();
             try {
-                ResolveOccupationRiskResponse occupationResponse = productServiceClient.resolveOccupationRisk(coveragePlan.productType(), occupationCode);
+                ResolveOccupationRiskResponse occupationResponse = productServiceClient
+                        .resolveOccupationRisk(coveragePlan.productType(), occupationCode);
                 if (occupationResponse != null && occupationResponse.riskLevel() != null) {
                     occupationRiskLower = occupationResponse.riskLevel().toLowerCase();
                 }
             } catch (Exception e) {
-                log.warn("Failed to resolve occupation risk for code: {}, defaulting to 'low'. Error: {}", occupationCode, e.getMessage());
+                log.warn("Failed to resolve occupation risk for code: {}, defaulting to 'low'. Error: {}",
+                        occupationCode, e.getMessage());
             }
         }
 
         // 7. Fetch Claim History from Policy service (with mock fallback)
-        ClaimHistorySummaryResponse claimHistory = fetchClaimHistory(buyerProfile.userId(), coveragePlan.productType());
+        ClaimHistorySummaryResponse claimHistory = fetchClaimHistory(request.insuredPersonId(), coveragePlan.productType());
+        double prevCostClaimsYearEur = vndToEur(claimHistory.prevCostClaimsYear());
+        double totalPastClaimAmountEur = vndToEur(claimHistory.totalPastClaimAmount());
 
         // 8. Build prediction payload
         HealthRiskProfile healthRiskProfile = new HealthRiskProfile(
@@ -120,8 +165,7 @@ public class PricingQuoteService {
                 bloodPressure,
                 exerciseFrequency,
                 preExistingCondition,
-                occupationRiskLower
-        );
+                occupationRiskLower);
 
         PortfolioPricingProfile portfolioProfile = new PortfolioPricingProfile(
                 gender,
@@ -132,32 +176,39 @@ public class PricingQuoteService {
                 1.0,
                 "YES",
                 "DIRECT",
-                claimHistory.prevCostClaimsYear(),
+                prevCostClaimsYearEur,
                 claimHistory.prevNMedicalServices(),
                 claimHistory.prevHadClaimOrService(),
-                claimHistory.claimFreePreviousYear()
-        );
+                claimHistory.claimFreePreviousYear());
 
         HistoricalExperienceFeatures historicalExperience = new HistoricalExperienceFeatures(
                 claimHistory.pastClaimCount(),
-                claimHistory.totalPastClaimAmount(),
+                totalPastClaimAmountEur,
                 claimHistory.claimFreeYears(),
-                claimHistory.recencyWeightedClaimScore()
-        );
+                claimHistory.recencyWeightedClaimScore());
 
         HealthPricingPredictionRequest predictionRequest = new HealthPricingPredictionRequest(
                 "HEALTH",
                 healthRiskProfile,
                 portfolioProfile,
-                historicalExperience
-        );
+                historicalExperience);
+
+        HealthPricingPredictionRequest neutralPredictionRequest = new HealthPricingPredictionRequest(
+                "HEALTH",
+                healthRiskProfile,
+                neutralPortfolioProfile(gender, coveragePlan.productType()),
+                neutralHistoricalExperience());
 
         // 9. Invoke AI Model Service
         HealthPricingPredictionResponse predictionResponse = null;
+        HealthPricingPredictionResponse neutralPredictionResponse = null;
         String predictionStatus = "SUCCESS";
         String errorMessage = null;
         try {
             predictionResponse = aiModelServiceClient.predictHealthPricing(predictionRequest);
+            if (hasPortfolioExperience(claimHistory)) {
+                neutralPredictionResponse = aiModelServiceClient.predictHealthPricing(neutralPredictionRequest);
+            }
         } catch (Exception e) {
             predictionStatus = "FAILED";
             errorMessage = e.getMessage();
@@ -183,20 +234,22 @@ public class PricingQuoteService {
         boolean approximate = false;
 
         if ("SUCCESS".equals(predictionStatus) && predictionResponse != null) {
-            if (predictionResponse.portfolioModel() != null && "configured".equals(predictionResponse.portfolioModel().status())) {
+            if (predictionResponse.portfolioModel() != null
+                    && "configured".equals(predictionResponse.portfolioModel().status())) {
                 portfolioModelVersion = predictionResponse.portfolioModel().modelVersion();
                 predictedAnnualClaimCost = predictionResponse.portfolioModel().predictedAnnualClaimCost();
-                rawPortfolioFactor = predictionResponse.portfolioModel().rawPortfolioRiskFactor();
-                portfolioFactor = predictionResponse.portfolioModel().portfolioRiskFactor();
+                rawPortfolioFactor = calculateRawExperienceFactor(predictionResponse, neutralPredictionResponse, claimHistory);
+                portfolioFactor = calculatePortfolioExperienceFactor(rawPortfolioFactor, claimHistory);
                 portfolioExplanation = predictionResponse.portfolioModel().portfolioModelExplanation();
             }
 
-            if (predictionResponse.healthRiskModel() != null && "configured".equals(predictionResponse.healthRiskModel().status())) {
+            if (predictionResponse.healthRiskModel() != null
+                    && "configured".equals(predictionResponse.healthRiskModel().status())) {
                 healthModelVersion = predictionResponse.healthRiskModel().modelVersion();
                 predictedHealthCost = predictionResponse.healthRiskModel().predictedHealthCost();
                 baselineHealthCost = predictionResponse.healthRiskModel().baselineHealthCost();
                 rawHealthFactor = predictionResponse.healthRiskModel().rawHealthRiskFactor();
-                healthFactor = predictionResponse.healthRiskModel().healthRiskFactor();
+                healthFactor = calculateHealthRatingFactor(rawHealthFactor);
                 healthExplanation = predictionResponse.healthRiskModel().healthRiskExplanation();
 
                 if (predictionResponse.healthRiskModel().healthRiskExplanation() != null) {
@@ -209,6 +262,12 @@ public class PricingQuoteService {
             }
         }
 
+        topRiskFactors = mergeExplanationItems(portfolioExplanation, healthExplanation, "topRiskFactors", 8);
+        shapValues = mergeExplanationItems(portfolioExplanation, healthExplanation, "shapValues", 10);
+        if (topRiskFactors != null && topRiskFactors.size() > 0) {
+            explanationMethod = "combined_model_explanation";
+        }
+
         // 10. Run Rating Engine
         BigDecimal underwritingAdjustment = BigDecimal.ONE;
         BigDecimal businessAdjustment = BigDecimal.ONE;
@@ -217,8 +276,7 @@ public class PricingQuoteService {
                 portfolioFactor,
                 healthFactor,
                 underwritingAdjustment,
-                businessAdjustment
-        );
+                businessAdjustment);
 
         // 11. Run Combined Risk Level Calculation
         RiskLevel combinedRisk = riskLevelCalculator.calculateCombinedRiskLevel(portfolioFactor, healthFactor);
@@ -295,8 +353,7 @@ public class PricingQuoteService {
                     savedQuote,
                     "quote.generated",
                     null,
-                    null
-            ));
+                    null));
         }
 
         return mapToResponse(savedQuote, explanation);
@@ -321,7 +378,8 @@ public class PricingQuoteService {
         List<PremiumQuote> quotes = quoteRepository.findByBuyerUserIdOrderByCreatedAtDesc(buyerProfile.userId());
         return quotes.stream()
                 .map(q -> {
-                    PricingExplanation explanation = explanationRepository.findByQuoteQuoteId(q.getQuoteId()).orElse(null);
+                    PricingExplanation explanation = explanationRepository.findByQuoteQuoteId(q.getQuoteId())
+                            .orElse(null);
                     return mapToResponse(q, explanation);
                 })
                 .toList();
@@ -343,8 +401,7 @@ public class PricingQuoteService {
                     saved,
                     "quote.expired",
                     null,
-                    null
-            ));
+                    null));
             throw new IllegalStateException("Quote has expired");
         }
 
@@ -366,8 +423,7 @@ public class PricingQuoteService {
                     saved,
                     "quote.expired",
                     null,
-                    null
-            ));
+                    null));
             throw new IllegalStateException("Quote has expired");
         }
 
@@ -418,8 +474,7 @@ public class PricingQuoteService {
                 quote.getBasePremium(),
                 quote.getFinalPremium(),
                 status,
-                quote.getExpiredAt()
-        );
+                quote.getExpiredAt());
     }
 
     // --- Helper Parsing Methods ---
@@ -445,8 +500,10 @@ public class PricingQuoteService {
         }
         if (insuredGender != null && !insuredGender.isBlank()) {
             String lower = insuredGender.toLowerCase();
-            if (lower.startsWith("m")) return "male";
-            if (lower.startsWith("f")) return "female";
+            if (lower.startsWith("m"))
+                return "male";
+            if (lower.startsWith("f"))
+                return "female";
         }
         return "male";
     }
@@ -476,9 +533,142 @@ public class PricingQuoteService {
                     0.0,
                     0.0,
                     false,
-                    true
-            );
+                    true,
+                    0.0);
         }
+    }
+
+    private PortfolioPricingProfile neutralPortfolioProfile(String gender, String productType) {
+        return new PortfolioPricingProfile(
+                gender,
+                productType,
+                "STANDARD",
+                "FULL",
+                1.0,
+                1.0,
+                "YES",
+                "DIRECT",
+                neutralPrevCostClaimsYearEur,
+                neutralPrevNMedicalServices,
+                neutralPrevHadClaimOrService,
+                neutralClaimFreePreviousYear);
+    }
+
+    private HistoricalExperienceFeatures neutralHistoricalExperience() {
+        return new HistoricalExperienceFeatures(0, 0.0, 5, 0.0);
+    }
+
+    private boolean hasPortfolioExperience(ClaimHistorySummaryResponse claimHistory) {
+        return positive(claimHistory.historicalExposureYears())
+                || positive(claimHistory.pastClaimCount())
+                || positive(claimHistory.totalPastClaimAmount())
+                || positive(claimHistory.prevCostClaimsYear())
+                || positive(claimHistory.prevNMedicalServices())
+                || Boolean.TRUE.equals(claimHistory.prevHadClaimOrService());
+    }
+
+    private BigDecimal calculateRawExperienceFactor(
+            HealthPricingPredictionResponse actualResponse,
+            HealthPricingPredictionResponse neutralResponse,
+            ClaimHistorySummaryResponse claimHistory) {
+        if (!hasPortfolioExperience(claimHistory)
+                || actualResponse == null
+                || actualResponse.portfolioModel() == null
+                || neutralResponse == null
+                || neutralResponse.portfolioModel() == null) {
+            return BigDecimal.ONE;
+        }
+
+        BigDecimal actual = actualResponse.portfolioModel().predictedAnnualClaimCost();
+        BigDecimal neutral = neutralResponse.portfolioModel().predictedAnnualClaimCost();
+        if (actual == null || neutral == null || neutral.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ONE;
+        }
+        return BigDecimal.valueOf(actual.doubleValue() / neutral.doubleValue());
+    }
+
+    private BigDecimal calculatePortfolioExperienceFactor(BigDecimal rawExperienceFactor, ClaimHistorySummaryResponse claimHistory) {
+        if (!hasPortfolioExperience(claimHistory)) {
+            return BigDecimal.ONE;
+        }
+
+        double raw = rawExperienceFactor != null ? rawExperienceFactor.doubleValue() : 1.0;
+        double exposureYears = Math.max(nullToZero(claimHistory.historicalExposureYears()), 0.0);
+        double credibility = portfolioCredibilityK > 0
+                ? exposureYears / (exposureYears + portfolioCredibilityK)
+                : 1.0;
+        double blended = 1.0 + credibility * (raw - 1.0);
+        return BigDecimal.valueOf(clamp(blended, portfolioFactorMin, portfolioFactorMax));
+    }
+
+    private BigDecimal calculateHealthRatingFactor(BigDecimal rawHealthRiskFactor) {
+        double raw = rawHealthRiskFactor != null ? rawHealthRiskFactor.doubleValue() : 1.0;
+        if (raw <= 0) {
+            return BigDecimal.ONE;
+        }
+        double logAdjusted = 1.0 + healthRiskLogAlpha * Math.log(raw);
+        return BigDecimal.valueOf(clamp(logAdjusted, healthFactorMin, healthFactorMax));
+    }
+
+    private double clamp(double value, double min, double max) {
+        double lower = Math.min(min, max);
+        double upper = Math.max(min, max);
+        return Math.max(lower, Math.min(value, upper));
+    }
+
+    private boolean positive(Number value) {
+        return value != null && value.doubleValue() > 0.0;
+    }
+
+    private double nullToZero(Double value) {
+        return value != null ? value : 0.0;
+    }
+
+    private double vndToEur(Double amountVnd) {
+        if (amountVnd == null || amountVnd <= 0) {
+            return 0.0;
+        }
+        if (vndPerEur <= 0) {
+            log.warn("Invalid app.currency.vnd-per-eur value: {}. Falling back to unconverted VND amount.", vndPerEur);
+            return amountVnd;
+        }
+        return amountVnd / vndPerEur;
+    }
+
+    private ArrayNode mergeExplanationItems(JsonNode portfolioExplanation, JsonNode healthExplanation, String fieldName, int limit) {
+        List<JsonNode> items = new ArrayList<>();
+        collectExplanationItems(items, portfolioExplanation, fieldName, "portfolio");
+        collectExplanationItems(items, healthExplanation, fieldName, "health");
+
+        if (items.isEmpty()) {
+            return null;
+        }
+
+        items.sort(Comparator.comparingDouble(this::absContribution).reversed());
+        ArrayNode merged = objectMapper.createArrayNode();
+        items.stream().limit(limit).forEach(merged::add);
+        return merged;
+    }
+
+    private void collectExplanationItems(List<JsonNode> target, JsonNode explanation, String fieldName, String model) {
+        if (explanation == null || !explanation.has(fieldName) || !explanation.get(fieldName).isArray()) {
+            return;
+        }
+
+        for (JsonNode item : explanation.get(fieldName)) {
+            ObjectNode copy = item.isObject()
+                    ? ((ObjectNode) item).deepCopy()
+                    : objectMapper.createObjectNode().set("value", item);
+            copy.put("model", model);
+            target.add(copy);
+        }
+    }
+
+    private double absContribution(JsonNode item) {
+        double contribution = item.has("contribution")
+                ? item.get("contribution").asDouble()
+                : item.path("value").asDouble(0.0);
+        return Math.abs(contribution);
     }
 
     private QuoteResponse mapToResponse(PremiumQuote q, PricingExplanation expl) {
@@ -490,8 +680,7 @@ public class PricingQuoteService {
                     expl.getTopRiskFactors(),
                     expl.getShapValues(),
                     expl.getExplanationMethod(),
-                    expl.getApproximate()
-            );
+                    expl.getApproximate());
         }
 
         BigDecimal combinedFactor = q.getPortfolioRiskFactor().multiply(q.getHealthRiskFactor());
@@ -517,7 +706,6 @@ public class PricingQuoteService {
                 q.getStatus(),
                 q.getCreatedAt(),
                 q.getExpiredAt(),
-                explanationResp
-        );
+                explanationResp);
     }
 }

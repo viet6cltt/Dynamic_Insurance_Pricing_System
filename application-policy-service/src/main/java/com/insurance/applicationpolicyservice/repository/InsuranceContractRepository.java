@@ -18,6 +18,7 @@ public interface InsuranceContractRepository extends JpaRepository<InsuranceCont
     List<InsuranceContract> findByApplicantUserIdOrderByCreatedAtDesc(UUID applicantUserId);
     List<InsuranceContract> findByInsuredPersonIdAndProductType(UUID insuredPersonId, String productType);
     long countByInsuredPersonIdAndProductType(UUID insuredPersonId, String productType);
+    boolean existsByInsuredPersonIdAndProductId(UUID insuredPersonId, UUID productId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from InsuranceContract c where c.contractId = :contractId")

@@ -65,6 +65,7 @@ public class InsuranceProductService {
                 .productType(request.productType().toUpperCase())
                 .name(request.name())
                 .description(request.description())
+                .imageUrl(request.imageUrl())
                 .status(request.status() != null ? request.status().toUpperCase() : "ACTIVE")
                 .build();
 
@@ -85,6 +86,9 @@ public class InsuranceProductService {
         if (request.status() != null && !request.status().isBlank()) {
             product.setStatus(request.status().toUpperCase());
         }
+        if (request.imageUrl() != null) {
+            product.setImageUrl(request.imageUrl());
+        }
 
         return mapToResponse(productRepository.save(product));
     }
@@ -102,6 +106,15 @@ public class InsuranceProductService {
         return mapToResponse(productRepository.save(product));
     }
 
+    @Transactional
+    public InsuranceProductResponse updateProductImageUrl(UUID productId, String imageUrl) {
+        InsuranceProduct product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Insurance product not found with ID: " + productId));
+
+        product.setImageUrl(imageUrl);
+        return mapToResponse(productRepository.save(product));
+    }
+
     private InsuranceProductResponse mapToResponse(InsuranceProduct p) {
         return new InsuranceProductResponse(
                 p.getProductId(),
@@ -109,6 +122,7 @@ public class InsuranceProductService {
                 p.getName(),
                 p.getDescription(),
                 p.getStatus(),
+                p.getImageUrl(),
                 p.getCreatedAt(),
                 p.getUpdatedAt()
         );

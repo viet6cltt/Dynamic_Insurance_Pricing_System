@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: product-service
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 30MB
   config:
     import: optional:file:.env[.properties]
   datasource:
@@ -19,6 +23,14 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  data:
+    redis:
+      database: 1
+      host: ${REDIS_HOST:${HOST:localhost}}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:secret_password}
+      timeout: 3000
+
 
 # Actuator Endpoints
 management:
@@ -29,3 +41,10 @@ management:
   endpoint:
     health:
       show-details: always
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9002}
+  external-url: ${MINIO_EXTERNAL_URL:http://localhost:9002}
+  access-key: ${SPRING_MINIO_ACCESS_KEY:${MINIO_ROOT_USER:minioadmin}}
+  secret-key: ${SPRING_MINIO_SECRET_KEY:${MINIO_ROOT_PASSWORD:minioadminpassword}}
+  bucket-name: ${SPRING_MINIO_BUCKET:${MINIO_BUCKET_NAME:insurance-products}}

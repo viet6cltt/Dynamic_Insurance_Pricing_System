@@ -293,7 +293,8 @@ public class ApplicationPolicyServiceApplicationTests {
                 .andExpect(jsonPath("$.prevCostClaimsYear").value(500.0))
                 .andExpect(jsonPath("$.prevNMedicalServices").value(4.0))
                 .andExpect(jsonPath("$.prevHadClaimOrService").value(true))
-                .andExpect(jsonPath("$.claimFreePreviousYear").value(false));
+                .andExpect(jsonPath("$.claimFreePreviousYear").value(false))
+                .andExpect(jsonPath("$.historicalExposureYears").value(1.5));
     }
 
     private InsuranceContract savePendingContract() {

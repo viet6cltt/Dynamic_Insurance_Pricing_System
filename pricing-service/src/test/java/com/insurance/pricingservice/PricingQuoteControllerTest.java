@@ -33,6 +33,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -108,7 +109,7 @@ public class PricingQuoteControllerTest {
         // Mock Policy Service
         Mockito.when(applicationPolicyServiceClient.getClaimHistorySummary(Mockito.any(UUID.class), Mockito.anyString()))
                 .thenReturn(new ClaimHistorySummaryResponse(
-                        0, 0.0, 5, 0.0, 0.0, 0.0, false, true
+                        2, 50000000.0, 1, 0.7, 25000000.0, 4.0, true, false, 2.0
                 ));
 
         // 2. Mock Product Service
@@ -133,7 +134,7 @@ public class PricingQuoteControllerTest {
         HealthPricingPredictionResponse predictionResponse = new HealthPricingPredictionResponse(
                 "v1.0", portfolioOutput, healthOutput, "Pricing Service / Rating Engine", "basePremium * portfolioRiskFactor * healthRiskFactor"
         );
-        Mockito.when(aiModelServiceClient.predictHealthPricing(Mockito.any(HealthPricingPredictionRequest.class)))
+        Mockito.when(aiModelServiceClient.predictHealthPricing(any(HealthPricingPredictionRequest.class)))
                 .thenReturn(predictionResponse);
 
         // Build sample input
@@ -168,6 +169,15 @@ public class PricingQuoteControllerTest {
 
         PremiumQuote savedQuote = quoteRepository.findAll().getFirst();
         assertEquals("GENERATED", savedQuote.getStatus());
+
+        var predictionCaptor = org.mockito.ArgumentCaptor.forClass(HealthPricingPredictionRequest.class);
+        Mockito.verify(aiModelServiceClient, Mockito.times(2)).predictHealthPricing(predictionCaptor.capture());
+        HealthPricingPredictionRequest actualRequest = predictionCaptor.getAllValues().getFirst();
+        HealthPricingPredictionRequest neutralRequest = predictionCaptor.getAllValues().get(1);
+        assertEquals(1000.0, actualRequest.portfolioProfile().prevCostClaimsYear());
+        assertEquals(2000.0, actualRequest.historicalExperienceFeatures().totalPastClaimAmount());
+        assertEquals(222.2, neutralRequest.portfolioProfile().prevCostClaimsYear());
+        assertEquals(7.0, neutralRequest.portfolioProfile().prevNMedicalServices());
     }
 
     @Test

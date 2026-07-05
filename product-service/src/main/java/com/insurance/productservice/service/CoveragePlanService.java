@@ -1,5 +1,6 @@
 package com.insurance.productservice.service;
 
+import com.insurance.productservice.config.CacheConfig;
 import com.insurance.productservice.dto.CreateCoveragePlanRequest;
 import com.insurance.productservice.dto.CoveragePlanResponse;
 import com.insurance.productservice.dto.InternalCoveragePlanResponse;
@@ -10,6 +11,9 @@ import com.insurance.productservice.model.InsuranceProduct;
 import com.insurance.productservice.repository.CoveragePlanRepository;
 import com.insurance.productservice.repository.InsuranceProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +40,7 @@ public class CoveragePlanService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.COVERAGE_PLAN_CACHE, key = "'public:' + #coveragePlanId")
     public CoveragePlanResponse getCoveragePlanById(UUID coveragePlanId) {
         return planRepository.findById(coveragePlanId)
                 .map(this::mapToResponse)
@@ -43,6 +48,7 @@ public class CoveragePlanService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.COVERAGE_PLAN_CACHE, key = "'internal:' + #coveragePlanId")
     public InternalCoveragePlanResponse getInternalCoveragePlan(UUID coveragePlanId) {
         return planRepository.findById(coveragePlanId)
                 .map(this::mapToInternalResponse)
@@ -77,6 +83,10 @@ public class CoveragePlanService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.COVERAGE_PLAN_CACHE, key = "'public:' + #coveragePlanId"),
+            @CacheEvict(value = CacheConfig.COVERAGE_PLAN_CACHE, key = "'internal:' + #coveragePlanId")
+    })
     public CoveragePlanResponse updateCoveragePlan(UUID coveragePlanId, UpdateCoveragePlanRequest request) {
         CoveragePlan plan = planRepository.findById(coveragePlanId)
                 .orElseThrow(() -> new IllegalArgumentException("Coverage plan not found with ID: " + coveragePlanId));
@@ -101,6 +111,10 @@ public class CoveragePlanService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.COVERAGE_PLAN_CACHE, key = "'public:' + #coveragePlanId"),
+            @CacheEvict(value = CacheConfig.COVERAGE_PLAN_CACHE, key = "'internal:' + #coveragePlanId")
+    })
     public CoveragePlanResponse updateCoveragePlanStatus(UUID coveragePlanId, String status) {
         if (status == null || status.isBlank()) {
             throw new IllegalArgumentException("Status cannot be null or empty");

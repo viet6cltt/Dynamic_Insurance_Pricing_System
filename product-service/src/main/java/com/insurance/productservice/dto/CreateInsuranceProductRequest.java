@@ -4,5 +4,6 @@ public record CreateInsuranceProductRequest(
     String productType,
     String name,
     String description,
-    String status
+    String status,
+    String imageUrl
 ) {}

@@ -43,6 +43,19 @@ app:
     max-retries: ${OUTBOX_MAX_RETRIES:5}
   quote:
     expiration-cron: ${QUOTE_EXPIRATION_CRON:0 10 0 * * *}
+  currency:
+    vnd-per-eur: ${VND_PER_EUR:27000}
+  rating:
+    health-risk-log-alpha: ${HEALTH_RISK_LOG_ALPHA:0.18}
+    health-factor-min: ${HEALTH_FACTOR_MIN:0.85}
+    health-factor-max: ${HEALTH_FACTOR_MAX:1.40}
+    portfolio-factor-min: ${PORTFOLIO_FACTOR_MIN:0.85}
+    portfolio-factor-max: ${PORTFOLIO_FACTOR_MAX:1.30}
+    portfolio-credibility-k: ${PORTFOLIO_CREDIBILITY_K:3.0}
+    portfolio-neutral-prev-cost-claims-year-eur: ${PORTFOLIO_NEUTRAL_PREV_COST_CLAIMS_YEAR_EUR:222.2}
+    portfolio-neutral-prev-n-medical-services: ${PORTFOLIO_NEUTRAL_PREV_N_MEDICAL_SERVICES:7.0}
+    portfolio-neutral-prev-had-claim-or-service: ${PORTFOLIO_NEUTRAL_PREV_HAD_CLAIM_OR_SERVICE:false}
+    portfolio-neutral-claim-free-previous-year: ${PORTFOLIO_NEUTRAL_CLAIM_FREE_PREVIOUS_YEAR:false}
 
 # Actuator Endpoints
 management:

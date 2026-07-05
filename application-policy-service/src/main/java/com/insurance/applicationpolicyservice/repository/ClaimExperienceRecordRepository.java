@@ -10,4 +10,5 @@ import java.util.UUID;
 @Repository
 public interface ClaimExperienceRecordRepository extends JpaRepository<ClaimExperienceRecord, UUID> {
     List<ClaimExperienceRecord> findByInsuredPersonIdAndProductType(UUID insuredPersonId, String productType);
+    List<ClaimExperienceRecord> findByPolicyholderUserIdOrderByExperienceDateDesc(UUID policyholderUserId);
 }
