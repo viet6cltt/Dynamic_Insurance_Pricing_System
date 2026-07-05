@@ -32,6 +32,11 @@ public class AuthenticationHeaderFilter {
             }
 
             String userId = authentication.getName();
+            try {
+                java.util.UUID.fromString(userId);
+            } catch (IllegalArgumentException e) {
+                userId = java.util.UUID.nameUUIDFromBytes(userId.getBytes()).toString();
+            }
             String role = resolveRole(authentication);
             String email = resolveJwtClaim(authentication, "email");
             String name = resolveJwtClaim(authentication, "name");
@@ -40,9 +45,17 @@ public class AuthenticationHeaderFilter {
             if (userStatus == null) {
                 logger.info("CACHE MISS, RESORTING TO USER SERVICE THROUGH HTTP");
                 try {
-                    userStatus = userClient.findUserStatus(userId);
+                    userStatus = userClient.findUserProfile(userId).customerStatus();
                 } catch (feign.FeignException.NotFound e) {
                     logger.info("USER NOT FOUND");
+                    logger.info("VALID REQUEST, PASSING REQUEST TO DOWNSTREAM SERVICE");
+                    return withAuthenticationHeaders(request, userId, role, email, name);
+                } catch (feign.FeignException e) {
+                    logger.warning("USER STATUS CHECK UNAVAILABLE: " + e.status() + " " + e.getMessage());
+                    logger.info("VALID REQUEST, PASSING REQUEST TO DOWNSTREAM SERVICE");
+                    return withAuthenticationHeaders(request, userId, role, email, name);
+                } catch (RuntimeException e) {
+                    logger.warning("USER STATUS CHECK FAILED: " + e.getMessage());
                     logger.info("VALID REQUEST, PASSING REQUEST TO DOWNSTREAM SERVICE");
                     return withAuthenticationHeaders(request, userId, role, email, name);
                 }

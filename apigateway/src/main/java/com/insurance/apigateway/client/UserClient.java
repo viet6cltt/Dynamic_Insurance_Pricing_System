@@ -5,9 +5,9 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
-@FeignClient(name = "USERSERVICE", path = "/api/v1/users/system", configuration = FeignConfig.class)
+@FeignClient(name = "USERSERVICE", path = "/internal/users", configuration = FeignConfig.class)
 public interface UserClient {
 
-    @GetMapping("/{userId}")
-    String findUserStatus(@PathVariable String userId);
+    @GetMapping("/by-auth-user/{userId}")
+    UserProfileResponse findUserProfile(@PathVariable String userId);
 }

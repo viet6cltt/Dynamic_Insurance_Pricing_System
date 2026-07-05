@@ -22,6 +22,12 @@ import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+/**
+ * @deprecated Replaced by {@link RateLimitFilter} which handles profile update
+ * along with quote-creation and general-api policies in a unified filter.
+ * This bean is kept for backward config compatibility but always skips all requests.
+ */
+@Deprecated(since = "2.0", forRemoval = true)
 @Component
 @RequiredArgsConstructor
 public class ProfileUpdateRateLimitFilter extends OncePerRequestFilter {

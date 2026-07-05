@@ -43,6 +43,14 @@ app:
       enabled: ${USER_PROFILE_UPDATE_RATE_LIMIT_ENABLED:true}
       max-requests: ${USER_PROFILE_UPDATE_RATE_LIMIT_MAX_REQUESTS:5}
       window: ${USER_PROFILE_UPDATE_RATE_LIMIT_WINDOW:1m}
+    quote-creation:
+      enabled: ${QUOTE_CREATION_RATE_LIMIT_ENABLED:true}
+      max-requests: ${QUOTE_CREATION_RATE_LIMIT_MAX_REQUESTS:10}
+      window: ${QUOTE_CREATION_RATE_LIMIT_WINDOW:1m}
+    general-api:
+      enabled: ${GENERAL_API_RATE_LIMIT_ENABLED:true}
+      max-requests: ${GENERAL_API_RATE_LIMIT_MAX_REQUESTS:200}
+      window: ${GENERAL_API_RATE_LIMIT_WINDOW:1m}
 
 springdoc:
   swagger-ui:
