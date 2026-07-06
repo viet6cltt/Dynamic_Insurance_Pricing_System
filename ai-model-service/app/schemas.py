@@ -104,6 +104,17 @@ class HealthPricingPredictionResponse(BaseModel):
     healthRiskModel: HealthRiskModelOutput
     finalPremiumCalculatedBy: Literal["Pricing Service / Rating Engine"]
     finalPremiumFormula: str
+    frequencyModelVersion: str | None = None
+    severityModelVersion: str | None = None
+    frequencyPrediction: float | None = None
+    predictedFrequencyAnnual: float | None = None
+    predictedSeverity: float | None = None
+    predictedPurePremium: float | None = None
+    baselinePurePremium: float | None = None
+    rawRiskFactor: float | None = None
+    appliedRiskFactor: float | None = None
+    riskFactors: list[dict] = []
+    explanationStatus: Literal["available", "partial", "unavailable"] | None = None
 
 
 class ModelComponentMetadata(BaseModel):
@@ -126,3 +137,53 @@ class ModelMetadataResponse(BaseModel):
     healthRiskModel: ModelComponentMetadata
     noFinalPremiumInModel: bool
     finalPremiumFormula: str
+
+
+class PurePremiumPredictionRequest(BaseModel):
+    age: float = Field(..., ge=0, le=120)
+    seniority_insured: float | None = Field(None, ge=0)
+    seniority_policy: float | None = Field(None, ge=0)
+    bmi: float = Field(..., ge=10, le=80)
+    blood_pressure: float = Field(..., ge=70, le=220)
+    prev_claim_count: float | None = Field(None, ge=0)
+    prev_claim_cost: float | None = Field(None, ge=0)
+    claim_free_years: float | None = Field(None, ge=0)
+    years_with_history: float | None = Field(None, ge=0)
+    type_policy: str | None = None
+    type_policy_dg: str | None = None
+    type_product: str
+    reimbursement: str | None = None
+    new_business: str | None = None
+    distribution_channel: str | None = None
+    smoker: Literal["yes", "no"]
+    pre_existing_condition: bool | str
+    exercise_frequency: str
+    occupation_risk: Literal["low", "moderate", "high"]
+    prev_had_claim: bool | str | None = None
+    claim_free_previous_year: bool | str | None = None
+    exposure_time: float = Field(1.0, gt=0)
+    prev_average_claim_severity: float | None = Field(None, ge=0)
+
+
+class PurePremiumPredictionResponse(BaseModel):
+    modelVersion: str
+    frequencyModelVersion: str | None = None
+    severityModelVersion: str | None = None
+    frequencyPrediction: float
+    predictedFrequencyAnnual: float
+    predictedSeverity: float
+    predictedPurePremium: float
+    baselinePurePremium: float
+    rawRiskFactor: float
+    appliedRiskFactor: float
+    riskFactors: list[dict]
+    explanationStatus: Literal["available", "partial", "unavailable"]
+
+
+class TrainingJobCreateRequest(BaseModel):
+    modelType: Literal["FREQUENCY", "SEVERITY"]
+
+
+class PromoteRejectRequest(BaseModel):
+    candidateVersion: int
+    reason: str | None = None

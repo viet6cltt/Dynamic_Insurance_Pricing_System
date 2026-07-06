@@ -169,8 +169,15 @@ class HealthPricingRuntime:
 
         if self.portfolio_pipeline is not None:
             try:
-                estimator = self.portfolio_pipeline.named_steps["model"]
-                if hasattr(estimator, "feature_importances_"):
+                pipeline = self.portfolio_pipeline
+                if hasattr(pipeline, "named_steps"):
+                    estimator = pipeline.named_steps["model"]
+                elif hasattr(pipeline, "frequency_pipeline"):
+                    estimator = pipeline.frequency_pipeline.model_
+                else:
+                    estimator = getattr(pipeline, "model_", None)
+
+                if estimator is not None and hasattr(estimator, "feature_importances_"):
                     self.portfolio_explainer = shap.TreeExplainer(estimator)
             except Exception as e:
                 print(f"Error initializing portfolio SHAP explainer: {e}")
@@ -616,8 +623,25 @@ class HealthPricingRuntime:
 
     def fallback_portfolio_explanation(self, frame: pd.DataFrame) -> dict[str, Any]:
         pipeline = self.portfolio_pipeline
-        estimator = pipeline.named_steps["model"]
-        preprocessor = pipeline.named_steps["preprocessor"]
+        if hasattr(pipeline, "named_steps"):
+            estimator = pipeline.named_steps["model"]
+            preprocessor = pipeline.named_steps["preprocessor"]
+        elif hasattr(pipeline, "frequency_pipeline"):
+            estimator = pipeline.frequency_pipeline.model_
+            preprocessor = pipeline.frequency_pipeline.preprocessor
+        else:
+            estimator = getattr(pipeline, "model_", None)
+            preprocessor = getattr(pipeline, "preprocessor", None)
+
+        if preprocessor is None or estimator is None:
+            return {
+                "topRiskFactors": [],
+                "featureContributions": [],
+                "shapValues": [],
+                "method": "none",
+                "generatedAt": datetime.now(timezone.utc).isoformat()
+            }
+
         transformed = preprocessor.transform(frame)
         if hasattr(transformed, "toarray"):
             transformed = transformed.toarray()
