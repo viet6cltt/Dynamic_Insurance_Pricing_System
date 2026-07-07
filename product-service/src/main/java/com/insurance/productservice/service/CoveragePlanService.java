@@ -76,6 +76,7 @@ public class CoveragePlanService {
                 .description(request.description())
                 .sumInsured(request.sumInsured())
                 .loadingRate(request.loadingRate())
+                .reimbursementEnabled(request.reimbursementEnabled() != null ? request.reimbursementEnabled() : false)
                 .status(request.status() != null ? request.status().toUpperCase() : "ACTIVE")
                 .build();
 
@@ -103,6 +104,9 @@ public class CoveragePlanService {
         if (request.loadingRate() != null) {
             validateLoadingRate(request.loadingRate());
             plan.setLoadingRate(request.loadingRate());
+        }
+        if (request.reimbursementEnabled() != null) {
+            plan.setReimbursementEnabled(request.reimbursementEnabled());
         }
         if (request.status() != null && !request.status().isBlank()) {
             plan.setStatus(request.status().toUpperCase());
@@ -167,6 +171,7 @@ public class CoveragePlanService {
                 plan.getDescription(),
                 plan.getSumInsured(),
                 plan.getLoadingRate(),
+                plan.getReimbursementEnabled(),
                 plan.getStatus(),
                 plan.getCreatedAt(),
                 plan.getUpdatedAt()
@@ -181,6 +186,7 @@ public class CoveragePlanService {
                 plan.getPlanName(),
                 plan.getSumInsured(),
                 plan.getLoadingRate(),
+                plan.getReimbursementEnabled(),
                 plan.getStatus()
         );
     }

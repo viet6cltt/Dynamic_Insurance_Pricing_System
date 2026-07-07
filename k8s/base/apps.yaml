@@ -1,0 +1,646 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-discovery
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8761
+      targetPort: 8761
+      nodePort: 30876
+  selector:
+    app.kubernetes.io/name: service-discovery
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-discovery
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: service-discovery
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: service-discovery
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: service-discovery
+          image: dynamic-insurance/service-discovery:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8761
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "8761"
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authorization-server
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+      nodePort: 30090
+  selector:
+    app.kubernetes.io/name: authorization-server
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authorization-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authorization-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authorization-server
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: authorization-server
+          image: dynamic-insurance/authorization-server:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 9000
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "9000"
+            - name: DB_HOST
+              value: auth-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: auth_db
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: dynamic-insurance-config
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dynamic-insurance-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+spec:
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+  selector:
+    app.kubernetes.io/name: user-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: user-service
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: user-service
+          image: dynamic-insurance/user-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "8081"
+            - name: DB_HOST
+              value: user-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: user_service_db
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: dynamic-insurance-config
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dynamic-insurance-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-service
+spec:
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+  selector:
+    app.kubernetes.io/name: product-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: product-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: product-service
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: product-service
+          image: dynamic-insurance/product-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "8082"
+            - name: DB_HOST
+              value: product-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: product_db
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: dynamic-insurance-config
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dynamic-insurance-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-model-service
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      nodePort: 30085
+  selector:
+    app.kubernetes.io/name: ai-model-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-model-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-model-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-model-service
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: ai-model-service
+          image: dynamic-insurance/ai-model-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pricing-service
+spec:
+  ports:
+    - name: http
+      port: 8083
+      targetPort: 8083
+  selector:
+    app.kubernetes.io/name: pricing-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pricing-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pricing-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pricing-service
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: pricing-service
+          image: dynamic-insurance/pricing-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "8083"
+            - name: DB_HOST
+              value: pricing-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: pricing_db
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: dynamic-insurance-config
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dynamic-insurance-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 35
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 100
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: application-policy-service
+spec:
+  ports:
+    - name: http
+      port: 8084
+      targetPort: 8084
+  selector:
+    app.kubernetes.io/name: application-policy-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: application-policy-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: application-policy-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: application-policy-service
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: application-policy-service
+          image: dynamic-insurance/application-policy-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8084
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "8084"
+            - name: DB_HOST
+              value: policy-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: policy_db
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: dynamic-insurance-config
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dynamic-insurance-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 35
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 100
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+spec:
+  ports:
+    - name: http
+      port: 8085
+      targetPort: 8085
+  selector:
+    app.kubernetes.io/name: payment-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payment-service
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: payment-service
+          image: dynamic-insurance/payment-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8085
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "8085"
+            - name: DB_HOST
+              value: payment-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: payment_db
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: dynamic-insurance-config
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dynamic-insurance-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 35
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 100
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+spec:
+  ports:
+    - name: http
+      port: 8086
+      targetPort: 8086
+  selector:
+    app.kubernetes.io/name: notification-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notification-service
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: notification-service
+          image: dynamic-insurance/notification-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8086
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "8086"
+            - name: DB_HOST
+              value: notification-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: notification_db
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: dynamic-insurance-config
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dynamic-insurance-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 35
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 100
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apigateway
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080
+  selector:
+    app.kubernetes.io/name: apigateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apigateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: apigateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: apigateway
+        app.kubernetes.io/part-of: dynamic-insurance
+    spec:
+      containers:
+        - name: apigateway
+          image: dynamic-insurance/apigateway:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: dynamic-insurance-config
+            - secretRef:
+                name: dynamic-insurance-secrets
+          env:
+            - name: PORT
+              value: "8080"
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 35
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 100
+            periodSeconds: 20

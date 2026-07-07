@@ -1,0 +1,229 @@
+openapi: 3.0.3
+info:
+  title: Pricing Service
+  version: 1.0.0
+  description: Premium quote lifecycle and internal quote validation.
+paths:
+  /pricing/quotes:
+    post:
+      summary: Create a premium quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuoteRequest"
+      responses:
+        "201":
+          description: Created quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteResponse"
+  /pricing/quotes/me:
+    get:
+      summary: List current user's quotes
+      responses:
+        "200":
+          description: Quotes owned by current user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuoteResponse"
+  /pricing/quotes/{quoteId}:
+    get:
+      summary: Get quote by ID
+      parameters:
+        - $ref: "#/components/parameters/quoteId"
+      responses:
+        "200":
+          description: Quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteResponse"
+  /pricing/quotes/{quoteId}/accept:
+    post:
+      summary: Accept a generated quote
+      parameters:
+        - $ref: "#/components/parameters/quoteId"
+      responses:
+        "200":
+          description: Accepted quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteResponse"
+  /internal/pricing/quotes/{quoteId}:
+    get:
+      summary: Get quote by ID for internal callers
+      parameters:
+        - $ref: "#/components/parameters/quoteId"
+      responses:
+        "200":
+          description: Quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteResponse"
+  /internal/pricing/quotes/{quoteId}/validate:
+    post:
+      summary: Validate quote ownership, insured person and coverage plan
+      parameters:
+        - $ref: "#/components/parameters/quoteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateQuoteRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateQuoteResponse"
+  /internal/pricing/quotes/{quoteId}/mark-used:
+    post:
+      summary: Mark quote as used by a contract
+      parameters:
+        - $ref: "#/components/parameters/quoteId"
+      responses:
+        "200":
+          description: Used quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteResponse"
+components:
+  parameters:
+    quoteId:
+      name: quoteId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    CreateQuoteRequest:
+      type: object
+      required: [insuredPersonId, productId, coveragePlanId, riskProfile]
+      properties:
+        insuredPersonId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        coveragePlanId:
+          type: string
+          format: uuid
+        riskProfile:
+          type: object
+          additionalProperties: true
+    QuoteResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        buyerUserId:
+          type: string
+          format: uuid
+        insuredPersonId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        coveragePlanId:
+          type: string
+          format: uuid
+        productType:
+          type: string
+        planName:
+          type: string
+        sumInsured:
+          type: number
+        predictedAnnualFrequency:
+          type: number
+        predictedAverageSeverity:
+          type: number
+        purePremium:
+          type: number
+        loadingRate:
+          type: number
+        finalPremium:
+          type: number
+        frequencyModelVersion:
+          type: string
+        severityModelVersion:
+          type: string
+        riskLevel:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiredAt:
+          type: string
+          format: date-time
+    ValidateQuoteRequest:
+      type: object
+      properties:
+        buyerUserId:
+          type: string
+          format: uuid
+          nullable: true
+        insuredPersonId:
+          type: string
+          format: uuid
+          nullable: true
+        coveragePlanId:
+          type: string
+          format: uuid
+          nullable: true
+    ValidateQuoteResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        quoteId:
+          type: string
+          format: uuid
+        buyerUserId:
+          type: string
+          format: uuid
+          nullable: true
+        insuredPersonId:
+          type: string
+          format: uuid
+          nullable: true
+        productId:
+          type: string
+          format: uuid
+          nullable: true
+        coveragePlanId:
+          type: string
+          format: uuid
+          nullable: true
+        purePremium:
+          type: number
+          nullable: true
+        loadingRate:
+          type: number
+          nullable: true
+        finalPremium:
+          type: number
+          nullable: true
+        status:
+          type: string
+        expiredAt:
+          type: string
+          format: date-time
+          nullable: true

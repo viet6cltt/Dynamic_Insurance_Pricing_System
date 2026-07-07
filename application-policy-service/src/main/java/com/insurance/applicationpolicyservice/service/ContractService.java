@@ -200,7 +200,10 @@ public class ContractService {
                 summary.getPrevNMedicalServices().doubleValue(),
                 summary.getPrevHadClaimOrService(),
                 summary.getClaimFreePreviousYear(),
-                summary.getSeniorityInsured().doubleValue()
+                summary.getSeniorityInsured().doubleValue(),
+                summary.getSeniorityInsured().doubleValue(),
+                summary.getActivePolicyCount(),
+                summary.getCompletedPolicyCount()
         );
     }
 

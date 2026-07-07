@@ -37,6 +37,9 @@ public class RouteConfig {
     @Value("${app.services.notification-service-url:http://localhost:8086}")
     private String notificationServiceUrl;
 
+    @Value("${app.services.ai-model-service-url:http://localhost:8000}")
+    private String aiModelServiceUrl;
+
     @Bean
     public RouterFunction<ServerResponse> insuranceRoutes(AuthenticationHeaderFilter authenticationHeaderFilter) {
         return route("pricing-service-route")
@@ -73,6 +76,20 @@ public class RouteConfig {
                         .route(path("/products/**").or(path("/products")), http())
                         .before(authenticationHeaderFilter.addAuthenticationHeader())
                         .before(uri(productServiceUrl))
+                        .build())
+                .and(route("coverage-plan-service-route")
+                        .route(path("/coverage-plans/**").or(path("/coverage-plans")), http())
+                        .before(authenticationHeaderFilter.addAuthenticationHeader())
+                        .before(uri(productServiceUrl))
+                        .build())
+                .and(route("ai-model-admin-service-route")
+                        .route(
+                                path("/api/admin/training-jobs/**").or(path("/api/admin/training-jobs"))
+                                        .or(path("/api/admin/models/**"))
+                                        .or(path("/api/admin/models")),
+                                http())
+                        .before(authenticationHeaderFilter.addAuthenticationHeader())
+                        .before(uri(aiModelServiceUrl))
                         .build())
                 .and(route("product-admin-service-route")
                         .route(path("/admin/**").or(path("/admin")), http())

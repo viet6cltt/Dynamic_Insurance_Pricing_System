@@ -12,6 +12,7 @@ public record CoveragePlanResponse(
     String description,
     BigDecimal sumInsured,
     BigDecimal loadingRate,
+    Boolean reimbursementEnabled,
     String status,
     Instant createdAt,
     Instant updatedAt

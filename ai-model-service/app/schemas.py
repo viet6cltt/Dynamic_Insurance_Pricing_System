@@ -73,10 +73,11 @@ class HealthPricingPredictionResponse(BaseModel):
     predictedAverageSeverity: float
     purePremium: float
     riskLevel: Literal["LOW", "MEDIUM", "HIGH"]
-    frequencyModelVersion: str
-    severityModelVersion: str
+    frequencyModelVersion: str | None = None
+    severityModelVersion: str | None = None
     frequencyExplanation: dict
     severityExplanation: dict
+    topRiskFactors: list | None = None
 
 
 class ModelComponentMetadata(BaseModel):
@@ -103,6 +104,7 @@ class ModelMetadataResponse(BaseModel):
 
 class PurePremiumPredictionRequest(BaseModel):
     age: float = Field(..., ge=0, le=120)
+    gender: Literal["M", "F", "male", "female"] | None = None
     seniority_insured: float | None = Field(None, ge=0)
     seniority_policy: float | None = Field(None, ge=0)
     bmi: float = Field(..., ge=10, le=80)
@@ -132,10 +134,11 @@ class PurePremiumPredictionResponse(BaseModel):
     predictedAverageSeverity: float
     purePremium: float
     riskLevel: Literal["LOW", "MEDIUM", "HIGH"]
-    frequencyModelVersion: str
-    severityModelVersion: str
+    frequencyModelVersion: str | None = None
+    severityModelVersion: str | None = None
     frequencyExplanation: dict
     severityExplanation: dict
+    topRiskFactors: list | None = None
 
 
 class TrainingJobCreateRequest(BaseModel):

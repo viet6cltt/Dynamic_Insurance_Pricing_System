@@ -1,0 +1,274 @@
+openapi: 3.0.3
+info:
+  title: User Service
+  version: 1.0.0
+  description: User profiles and insured-person records.
+paths:
+  /users/me:
+    get:
+      summary: Get current user's profile
+      parameters:
+        - name: X-USER-EMAIL
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: X-USER-NAME
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+    put:
+      summary: Update current user's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserProfileRequest"
+      responses:
+        "200":
+          description: Updated user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+  /insured-persons:
+    post:
+      summary: Create an insured-person record for current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInsuredPersonRequest"
+      responses:
+        "201":
+          description: Created insured person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsuredPersonResponse"
+  /insured-persons/me:
+    get:
+      summary: List current user's insured persons
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/size"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paged insured persons
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagedInsuredPersonResponse"
+  /insured-persons/{insuredPersonId}:
+    get:
+      summary: Get insured-person detail
+      parameters:
+        - $ref: "#/components/parameters/insuredPersonId"
+      responses:
+        "200":
+          description: Insured person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsuredPersonResponse"
+    put:
+      summary: Update insured-person detail
+      parameters:
+        - $ref: "#/components/parameters/insuredPersonId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInsuredPersonRequest"
+      responses:
+        "200":
+          description: Updated insured person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsuredPersonResponse"
+    delete:
+      summary: Deactivate insured person
+      parameters:
+        - $ref: "#/components/parameters/insuredPersonId"
+      responses:
+        "200":
+          description: Deactivation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeactivateResponse"
+  /internal/users:
+    post:
+      summary: Create user profile from another service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserProfileRequest"
+      responses:
+        "201":
+          description: Created user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+  /internal/users/by-auth-user/{authUserId}:
+    get:
+      summary: Get user profile by auth user ID
+      parameters:
+        - name: authUserId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+  /internal/insured-persons/{insuredPersonId}:
+    get:
+      summary: Get insured person by ID for internal callers
+      parameters:
+        - $ref: "#/components/parameters/insuredPersonId"
+      responses:
+        "200":
+          description: Insured person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsuredPersonResponse"
+  /api/v1/users/system/{userId}:
+    get:
+      summary: Get customer status for system integrations
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Customer status
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: User not found
+components:
+  parameters:
+    page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 0
+    size:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 20
+    insuredPersonId:
+      name: insuredPersonId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    CreateUserProfileRequest:
+      type: object
+      additionalProperties: true
+    UpdateUserProfileRequest:
+      type: object
+      additionalProperties: true
+    UserProfileResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        userProfileId:
+          type: string
+          format: uuid
+        authUserId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        customerStatus:
+          type: string
+    CreateInsuredPersonRequest:
+      type: object
+      additionalProperties: true
+    UpdateInsuredPersonRequest:
+      type: object
+      additionalProperties: true
+    InsuredPersonResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        insuredPersonId:
+          type: string
+          format: uuid
+        ownerUserId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        gender:
+          type: string
+        status:
+          type: string
+    DeactivateResponse:
+      type: object
+      additionalProperties: true
+    PagedInsuredPersonResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InsuredPersonResponse"
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/InsuredPersonResponse"
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer

@@ -109,13 +109,13 @@ public class PricingQuoteControllerTest {
         // Mock Policy Service
         Mockito.when(applicationPolicyServiceClient.getClaimHistorySummary(Mockito.any(UUID.class), Mockito.anyString()))
                 .thenReturn(new ClaimHistorySummaryResponse(
-                        2, 50000000.0, 1, 0.7, 25000000.0, 4.0, true, false, 2.0
+                        2, 50000000.0, 1, 0.7, 25000000.0, 4.0, true, false, 2.0, 2.0, 1, 0
                 ));
 
         // 2. Mock Product Service
         InternalCoveragePlanResponse coveragePlan = new InternalCoveragePlanResponse(
-                coveragePlanId, productId, "HEALTH", "Standard Gold Plan",
-                new BigDecimal("150000000.00"), new BigDecimal("0.2000"), "ACTIVE"
+                coveragePlanId, productId, "HEALTH", "Premium Gold Plan",
+                new BigDecimal("150000000.00"), new BigDecimal("0.2000"), true, "ACTIVE"
         );
         Mockito.when(productServiceClient.getInternalCoveragePlan(coveragePlanId))
                 .thenReturn(coveragePlan);
@@ -127,8 +127,8 @@ public class PricingQuoteControllerTest {
         severityExplanation.set("topFactors", objectMapper.createArrayNode());
         HealthPricingPredictionResponse predictionResponse = new HealthPricingPredictionResponse(
                 new BigDecimal("10.000000"),
-                new BigDecimal("500000.00"),
-                new BigDecimal("5000000.00"),
+                new BigDecimal("20.00"),
+                new BigDecimal("200.00"),
                 "HIGH",
                 "frequency-v4",
                 "severity-v1",
@@ -149,7 +149,7 @@ public class PricingQuoteControllerTest {
         riskProfile.put("occupationCode", "OFFICE_WORKER");
 
         CreateQuoteRequest request = new CreateQuoteRequest(
-                insuredPersonId, productId, coveragePlanId, riskProfile
+                insuredPersonId, productId, coveragePlanId, riskProfile, true
         );
 
         // Mock Security Context
@@ -183,6 +183,11 @@ public class PricingQuoteControllerTest {
         HealthPricingPredictionRequest actualRequest = predictionCaptor.getAllValues().getFirst();
         assertEquals(1000.0, actualRequest.portfolioProfile().prevCostClaimsYear());
         assertEquals(2000.0, actualRequest.historicalExperienceFeatures().totalPastClaimAmount());
+        assertEquals("P", actualRequest.portfolioProfile().typeProduct());
+        assertEquals("I", actualRequest.portfolioProfile().typePolicy());
+        assertEquals("Yes", actualRequest.portfolioProfile().reimbursement());
+        assertEquals("No", actualRequest.portfolioProfile().newBusiness());
+        assertEquals("D", actualRequest.portfolioProfile().distributionChannel());
     }
 
     @Test
@@ -214,7 +219,7 @@ public class PricingQuoteControllerTest {
                 .productId(UUID.randomUUID())
                 .coveragePlanId(UUID.randomUUID())
                 .productType("HEALTH")
-                .planName("Standard Gold Plan")
+                .planName("Premium Gold Plan")
                 .sumInsured(new BigDecimal("150000000.00"))
                 .predictedFrequency(new BigDecimal("0.000000"))
                 .predictedSeverity(new BigDecimal("0.00"))

@@ -39,6 +39,10 @@ public class CoveragePlan {
     @Column(name = "loading_rate", nullable = false, precision = 5, scale = 4)
     private BigDecimal loadingRate;
 
+    @Column(name = "reimbursement_enabled", nullable = false)
+    @Builder.Default
+    private Boolean reimbursementEnabled = false;
+
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
     private String status = "ACTIVE";

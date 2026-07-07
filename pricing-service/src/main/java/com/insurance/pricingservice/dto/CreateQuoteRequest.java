@@ -7,5 +7,6 @@ public record CreateQuoteRequest(
     UUID insuredPersonId,
     UUID productId,
     UUID coveragePlanId,
-    JsonNode riskProfile
+    JsonNode riskProfile,
+    Boolean reimbursementEnabled
 ) {}

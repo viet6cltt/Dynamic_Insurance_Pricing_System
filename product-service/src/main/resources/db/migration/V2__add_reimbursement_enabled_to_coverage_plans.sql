@@ -1,0 +1,2 @@
+ALTER TABLE coverage_plans
+    ADD COLUMN IF NOT EXISTS reimbursement_enabled BOOLEAN NOT NULL DEFAULT FALSE;

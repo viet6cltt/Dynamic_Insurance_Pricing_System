@@ -174,6 +174,14 @@ export default function AppRoutes() {
             </AdminRoute>
           }
         />
+        <Route
+          path="/admin/ai-models"
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

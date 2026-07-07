@@ -7,5 +7,6 @@ public record CreateCoveragePlanRequest(
     String description,
     BigDecimal sumInsured,
     BigDecimal loadingRate,
+    Boolean reimbursementEnabled,
     String status
 ) {}

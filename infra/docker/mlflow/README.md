@@ -23,17 +23,17 @@ Open MLflow:
 http://127.0.0.1:15000
 ```
 
-Open MinIO console:
+Open MinIO console (started via docker-compose.full.yml):
 
 ```text
-http://127.0.0.1:19001
+http://127.0.0.1:9001
 ```
 
 Default MinIO credentials are:
 
 ```text
-user: mlflow
-password: mlflow-secret
+user: minioadmin
+password: minioadminpassword
 ```
 
 ## Train From Host
@@ -43,9 +43,9 @@ Python process can log artifacts to MinIO through MLflow:
 
 ```bash
 export MLFLOW_TRACKING_URI=http://127.0.0.1:15000
-export MLFLOW_S3_ENDPOINT_URL=http://127.0.0.1:19000
-export AWS_ACCESS_KEY_ID=mlflow
-export AWS_SECRET_ACCESS_KEY=mlflow-secret
+export MLFLOW_S3_ENDPOINT_URL=http://127.0.0.1:9002
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadminpassword
 ```
 
 Then run a training script with MLflow enabled:

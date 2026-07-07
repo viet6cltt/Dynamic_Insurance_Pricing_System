@@ -451,14 +451,14 @@ function CoveragePlanCard({ plan, onRegister }) {
         {/* Key numbers */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-blue-50 rounded-xl p-3">
-            <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">Loading rate</p>
+            <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">Tỷ lệ điều chỉnh</p>
             <p className="text-lg font-extrabold text-blue-700 mt-0.5">
               {(Number(plan.loadingRate || 0) * 100).toLocaleString("vi-VN")}
               <span className="text-xs font-normal text-blue-400">%</span>
             </p>
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Số tiền BH</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Số tiền BH tối đa</p>
             <p className="text-base font-extrabold text-gray-800 mt-0.5">
               {Number(plan.sumInsured || 0).toLocaleString("vi-VN")}
               <span className="text-xs font-normal text-gray-400">đ</span>
@@ -758,137 +758,364 @@ function RiskFieldInput({ field, value, onChange, occupationMappings, riskProfil
   );
 }
 
-function QuoteExplanationPanel({ quote, planName, onEdit, onContinue, submitting }) {
-  const explanation = quote?.explanation;
-  const allRiskFactors = toDisplayList(explanation?.topRiskFactors).map(normalizeExplanationItem);
-  const visibleRiskFactors = selectVisibleHealthFactors(allRiskFactors, 5);
-  const shapValues = toDisplayList(explanation?.shapValues).slice(0, 5);
-  const finalPremium = Number(quote.finalPremium || 0);
-  const purePremium = Number(quote.purePremium || 0);
-  const loadingRate = Number(quote.loadingRate || 0);
-  const loadingAmount = finalPremium - purePremium;
-  const monthlyPremium = finalPremium / 12;
+function FactorRow({ factor, expanded, onToggle }) {
+  const increases = factor.impact === "increase";
+  const colorClass = increases ? "bg-red-650" : "bg-emerald-600";
+  const pct = factor.contributionPct || 0;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-200">
-        <h4 className="font-bold text-gray-900">Báo giá bảo hiểm sức khỏe</h4>
-        <p className="text-sm font-semibold text-gray-500 mt-0.5">Gói {planName || quote.planName || "Standard"}</p>
-      </div>
-
-      <div className="px-5 py-5 space-y-4">
-        <div className="text-center">
-          <p className="text-3xl font-extrabold text-gray-950">
-            {formatMoney(finalPremium)}
-            <span className="text-base font-bold text-gray-500">/năm</span>
-          </p>
-          <p className="mt-1 text-sm font-semibold text-gray-500">{formatMoney(monthlyPremium)}/tháng</p>
-        </div>
-
-        <div className="space-y-2 text-sm">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-gray-500">Pure premium</span>
-            <span className="font-bold text-gray-900">{formatMoney(purePremium)}</span>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-gray-500">Loading rate ({(loadingRate * 100).toLocaleString("vi-VN")}%)</span>
-            <span className="font-bold text-red-600">
-              {formatSignedMoney(loadingAmount)}
+    <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm transition-all hover:border-gray-250">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full p-3.5 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white hover:bg-gray-50/50 transition-colors"
+      >
+        <div className="space-y-1.5 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-905 text-sm">{factor.displayName}</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+              increases ? "bg-red-50 text-red-700 border-red-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+            }`}>
+              {increases ? "Tăng" : "Giảm"}
             </span>
           </div>
-          <div className="border-t border-gray-100 pt-2 flex items-center justify-between gap-4">
-            <span className="font-bold text-gray-900">Tổng phí</span>
-            <span className="font-extrabold text-gray-950">{formatMoney(finalPremium)}</span>
+          
+          <div className="flex items-center gap-3">
+            <div className="w-full bg-gray-150 rounded-full h-2.5 max-w-[160px]">
+              <div className={`${colorClass} h-2.5 rounded-full`} style={{ width: `${pct}%` }}></div>
+            </div>
+            <span className="text-xs font-bold text-gray-800 w-12 text-right">{pct}%</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 justify-end self-end sm:self-center">
+          <span className="text-xs text-gray-400">Xem chi tiết</span>
+          <ChevronDown className={`w-4 h-4 text-gray-450 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="bg-gray-50/50 border-t border-gray-100 p-4 space-y-3 text-xs sm:text-sm text-gray-700">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="bg-white border border-gray-100 rounded-xl p-3">
+              <span className="text-[10px] font-bold text-gray-400 uppercase">Giá trị hiện tại</span>
+              <p className="font-bold text-gray-800 mt-1">{factor.currentValue}</p>
+            </div>
+            <div className="bg-white border border-gray-100 rounded-xl p-3">
+              <span className="text-[10px] font-bold text-gray-400 uppercase">Tỷ trọng ảnh hưởng</span>
+              <p className="font-bold text-gray-800 mt-1">{pct}%</p>
+            </div>
+          </div>
+          {factor.readableReason && (
+            <p className="text-xs text-gray-600 bg-white border border-gray-100/50 rounded-xl p-3 leading-relaxed">
+              {factor.readableReason}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuoteExplanationPanel({ quote, planName, onEdit, onContinue, submitting }) {
+  const [activeTab, setActiveTab] = useState("frequency");
+  const [expandedFactor, setExpandedFactor] = useState(null);
+  const [techExpanded, setTechExpanded] = useState(false);
+
+  const explanation = quote?.explanation;
+  const topRiskFactors = toDisplayList(explanation?.topRiskFactors).slice(0, 5);
+
+  const freqFactors = explanation?.frequencyExplanation?.topFactors || [];
+  const sumFreqPct = freqFactors.reduce((sum, f) => sum + (f.contributionPct || 0), 0);
+  const otherFreqPct = Math.max(0, 100 - sumFreqPct);
+
+  const sevFactors = explanation?.severityExplanation?.topFactors || [];
+  const sumSevPct = sevFactors.reduce((sum, f) => sum + (f.contributionPct || 0), 0);
+  const otherSevPct = Math.max(0, 100 - sumSevPct);
+
+  const finalPremium = Number(quote.finalPremium || 0);
+  const purePremium = Number(quote.purePremium || 0);
+  const loadingAmount = finalPremium - purePremium;
+  const sumInsured = Number(quote.sumInsured || 0);
+
+  const formatVnd = (val) => {
+    return `${Number(val || 0).toLocaleString("vi-VN", { maximumFractionDigits: 0 }).replace(/,/g, ".")} VNĐ`;
+  };
+
+  const formatNumber = (val) => {
+    const num = Number(val || 0);
+    return num.toLocaleString("vi-VN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
+
+  function getCleanReason(item) {
+    let reason = item.readableReason || "";
+    const prefix = `${item.displayName} (${item.currentValue})`;
+    if (reason.startsWith(prefix)) {
+      reason = reason.substring(prefix.length).trim();
+      reason = reason.charAt(0).toUpperCase() + reason.slice(1);
+    }
+    if (reason === "Ảnh hưởng đến đánh giá rủi ro.") {
+      const freq = item.frequencyImpact;
+      const sev = item.severityImpact;
+      if (freq === "increase" && sev === "increase") return "Làm tăng cả khả năng phát sinh và chi phí bồi thường.";
+      if (freq === "decrease" && sev === "decrease") return "Giúp giảm cả khả năng phát sinh và chi phí bồi thường.";
+      if (freq === "increase") return "Chủ yếu làm tăng khả năng phát sinh bồi thường.";
+      if (sev === "increase") return "Chủ yếu làm tăng chi phí trung bình mỗi lần bồi thường.";
+      if (freq === "decrease") return "Giúp giảm khả năng phát sinh bồi thường.";
+      if (sev === "decrease") return "Giúp giảm chi phí trung bình mỗi lần bồi thường.";
+    }
+    return reason;
+  }
+
+  let formattedExpiry = "";
+  if (quote.expiredAt) {
+    try {
+      const expDate = new Date(quote.expiredAt);
+      formattedExpiry = expDate.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+    } catch (e) {
+      formattedExpiry = quote.expiredAt;
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 1. Kết quả báo giá */}
+      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md space-y-6">
+        <div>
+          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">PHÍ BẢO HIỂM ĐỀ XUẤT</span>
+          <h2 className="text-3xl font-extrabold mt-1.5 tracking-tight">
+            {formatVnd(finalPremium)} <span className="text-sm font-normal text-slate-400">/ năm</span>
+          </h2>
+        </div>
+        
+        <div className="border-t border-slate-800 pt-4 space-y-3.5 text-sm">
+          <div className="flex justify-between items-center text-slate-350">
+            <span>Phí thuần</span>
+            <span className="font-semibold text-slate-100">{formatVnd(purePremium)}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-350">
+            <span>Phần điều chỉnh của gói</span>
+            <span className="font-semibold text-slate-100">{formatVnd(loadingAmount)}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-350">
+            <span>Hạn mức bảo hiểm</span>
+            <span className="font-semibold text-slate-100">{formatVnd(sumInsured)}</span>
+          </div>
+          <div className="border-t border-slate-800/60 pt-3.5 flex justify-between items-center text-xs text-slate-400">
+            <span>Báo giá có hiệu lực đến</span>
+            <span className="font-medium text-slate-300">{formattedExpiry}</span>
           </div>
         </div>
       </div>
 
-      <div className="border-t border-gray-200 px-5 py-5 space-y-4">
-        <p className="text-sm text-gray-600">
-          <span className="font-semibold text-gray-500">Mức rủi ro: </span>
-          <span className="font-bold text-gray-900">{formatRiskLevelLabel(quote.riskLevel)}</span>
-        </p>
+      {/* 2. Các yếu tố ảnh hưởng chính */}
+      <div className="bg-white rounded-2xl border border-gray-150 p-6 space-y-4 shadow-sm">
+        <h3 className="font-bold text-gray-900 text-base">Các yếu tố ảnh hưởng chính</h3>
+        {topRiskFactors.length > 0 ? (
+          <div className="space-y-4">
+            {topRiskFactors.map((item, index) => {
+              const increases = item.frequencyImpact === "increase" || item.severityImpact === "increase";
+              const Icon = increases ? ArrowUp : ArrowDown;
+              const cleanReason = getCleanReason(item);
+              
+              let affectedText = "";
+              if (item.affectedModels && item.affectedModels.length > 0) {
+                affectedText = "Ảnh hưởng đến: " + item.affectedModels.map(m => m === "frequency" ? "Tần suất" : "Chi phí").join(" · ");
+              }
 
-        {visibleRiskFactors.length > 0 ? (
-          <div className="space-y-5">
-            <p className="font-bold text-gray-900">Vì sao phí của bạn ở mức này?</p>
-
-            <div className="space-y-3">
-              <p className="text-xs font-extrabold uppercase text-gray-400">Frequency - Severity</p>
-              {visibleRiskFactors.map((item, index) => {
-                const badge = formatQualitativeFactorBadge(item);
-                const increases = item.rawContribution > 0 || item.impact.label === "Làm tăng phí";
-                const Icon = increases ? ArrowUp : ArrowDown;
-                return (
-                  <div key={`${item.title}-${index}`} className="grid grid-cols-[auto_1fr_auto] gap-3">
-                    <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ${increases ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-bold text-gray-900">{item.title}</p>
-                      <p className="mt-1 text-sm leading-relaxed text-gray-500">
-                        {getReadableFactorReason(item)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${badge.className}`}>
-                        {badge.label}
+              return (
+                <div key={index} className="flex gap-3.5 items-start">
+                  <span className={`mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${increases ? "bg-red-50 text-red-650" : "bg-emerald-50 text-emerald-650"}`}>
+                    <Icon className="h-4 w-4 font-bold" />
+                  </span>
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-gray-900 text-sm">{item.displayName}</h4>
+                    <p className="text-xs sm:text-sm text-gray-550 leading-relaxed">{cleanReason}</p>
+                    {affectedText && (
+                      <span className="inline-block text-[10px] font-bold text-slate-500 uppercase bg-slate-50 border border-slate-100 rounded px-1.5 py-0.5 mt-1">
+                        {affectedText}
                       </span>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
-          <div className="rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-800">
-            Chưa có danh sách yếu tố chi tiết từ AI model. Báo giá vẫn dùng predicted frequency, predicted severity và loading rate của gói.
+          <div className="rounded-xl bg-emerald-50/50 border border-emerald-100 p-4 text-xs sm:text-sm text-emerald-800 flex items-start gap-2.5">
+            <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <p className="leading-relaxed">
+              <span className="font-bold">Hồ sơ ở mức tiêu chuẩn:</span> Không phát hiện yếu tố rủi ro bất thường nào ảnh hưởng đáng kể đến việc tăng hoặc giảm phí bảo hiểm dự kiến của bạn.
+            </p>
           </div>
         )}
       </div>
 
-      <div className="border-t border-gray-200 px-5 py-4 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button onClick={onEdit} className="py-2.5 border border-gray-200 hover:bg-gray-50 rounded-lg text-sm font-bold text-gray-700">
-            Chỉnh sửa hồ sơ
-          </button>
-          <button onClick={onContinue} disabled={submitting} className="py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2">
-            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            <span>Tiếp tục mua</span>
-          </button>
-        </div>
+      {/* 3. Phân tích chi tiết */}
+      {explanation && (
+        <div className="bg-white rounded-2xl border border-gray-150 p-6 space-y-5 shadow-sm">
+          <h3 className="font-bold text-gray-900 text-base">Phân tích chi tiết</h3>
+          
+          <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100">
+            <button
+              type="button"
+              onClick={() => setActiveTab("frequency")}
+              className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${
+                activeTab === "frequency"
+                  ? "bg-white text-gray-950 shadow-sm border border-gray-100"
+                  : "text-gray-500 hover:text-gray-950"
+              }`}
+            >
+              Tần suất sử dụng/bồi thường
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("severity")}
+              className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${
+                activeTab === "severity"
+                  ? "bg-white text-gray-950 shadow-sm border border-gray-100"
+                  : "text-gray-500 hover:text-gray-950"
+              }`}
+            >
+              Chi phí mỗi lần bồi thường
+            </button>
+          </div>
 
-        {shapValues.length > 0 && (
-          <details className="px-1">
-            <summary className="cursor-pointer text-sm font-bold text-gray-600">Xem chi tiết cách tính phí</summary>
-            <div className="mt-3 divide-y divide-gray-100">
-              {shapValues.map((item, index) => {
-                const normalizedItem = normalizeExplanationItem(item);
-                return (
-                  <div key={`${normalizedItem.title}-${index}`} className="py-2 flex items-center justify-between gap-3">
-	                    <span className="text-xs font-medium text-gray-600">{normalizedItem.title}</span>
-	                    <div className="flex items-center gap-2">
-	                      {normalizedItem.model && (
-	                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${normalizedItem.model.className}`}>
-	                          {normalizedItem.model.label}
-                        </span>
-                      )}
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${normalizedItem.impact.className}`}>
-                        {normalizedItem.impact.label}
-                      </span>
+          {activeTab === "frequency" ? (
+            <div className="space-y-5">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                <span className="text-[10px] font-bold text-slate-450 uppercase">Tần suất sử dụng/bồi thường dự đoán</span>
+                <p className="text-base sm:text-lg font-extrabold text-slate-800 mt-1">
+                  {formatNumber(explanation.frequencyExplanation?.predictedValue)} <span className="text-xs font-normal text-slate-500">lần/năm</span>
+                </p>
+              </div>
+
+              <p className="text-[11px] text-gray-500 bg-slate-50 border border-slate-100/60 rounded-xl p-3 leading-relaxed">
+                Chú thích: Đây là số lần sử dụng dịch vụ hoặc phát sinh yêu cầu bồi thường kỳ vọng theo dữ liệu mô hình.
+              </p>
+
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold uppercase text-slate-450 tracking-wider">Các yếu tố ảnh hưởng</p>
+                <div className="space-y-3">
+                  {explanation.frequencyExplanation?.topFactors && explanation.frequencyExplanation.topFactors.length > 0 ? (
+                    explanation.frequencyExplanation.topFactors.map((factor, index) => (
+                      <FactorRow
+                        key={index}
+                        factor={factor}
+                        expanded={expandedFactor === `freq-${factor.feature}`}
+                        onToggle={() => setExpandedFactor(expandedFactor === `freq-${factor.feature}` ? null : `freq-${factor.feature}`)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 italic bg-gray-50 rounded-xl p-3 border border-gray-100/50">
+                      Không có yếu tố nào ảnh hưởng đáng kể đến tần suất sử dụng/bồi thường của bạn.
+                    </p>
+                  )}
+                  
+                  {explanation.frequencyExplanation?.topFactors && explanation.frequencyExplanation.topFactors.length > 0 && otherFreqPct > 0.05 && (
+                    <div className="border border-dashed border-gray-250/70 rounded-xl p-3 bg-gray-50/50 flex items-center justify-between text-xs text-gray-550">
+                      <span className="font-semibold text-gray-450">Các yếu tố khác (Chỉ hiển thị các yếu tố ảnh hưởng lớn nhất)</span>
+                      <span className="font-bold text-gray-800">{otherFreqPct.toFixed(2)}%</span>
                     </div>
-                  </div>
-                );
-              })}
+                  )}
+                </div>
+              </div>
             </div>
-          </details>
-        )}
+          ) : (
+            <div className="space-y-5">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                <span className="text-[10px] font-bold text-slate-450 uppercase">Chi phí dự kiến mỗi lần</span>
+                <p className="text-base sm:text-lg font-extrabold text-slate-800 mt-1">
+                  {formatVnd(explanation.severityExplanation?.predictedValue)}
+                </p>
+              </div>
 
-        {explanation?.approximate && (
-          <div className="rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 text-xs text-amber-800">
-            Phần giải thích này là xấp xỉ vì model hoặc dữ liệu giải thích chưa đầy đủ.
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold uppercase text-slate-450 tracking-wider">Các yếu tố ảnh hưởng</p>
+                <div className="space-y-3">
+                  {explanation.severityExplanation?.topFactors && explanation.severityExplanation.topFactors.length > 0 ? (
+                    explanation.severityExplanation.topFactors.map((factor, index) => (
+                      <FactorRow
+                        key={index}
+                        factor={factor}
+                        expanded={expandedFactor === `sev-${factor.feature}`}
+                        onToggle={() => setExpandedFactor(expandedFactor === `sev-${factor.feature}` ? null : `sev-${factor.feature}`)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 italic bg-gray-50 rounded-xl p-3 border border-gray-100/50">
+                      Không có yếu tố nào ảnh hưởng đáng kể đến chi phí bồi thường trung bình của bạn.
+                    </p>
+                  )}
+
+                  {explanation.severityExplanation?.topFactors && explanation.severityExplanation.topFactors.length > 0 && otherSevPct > 0.05 && (
+                    <div className="border border-dashed border-gray-250/70 rounded-xl p-3 bg-gray-50/50 flex items-center justify-between text-xs text-gray-550">
+                      <span className="font-semibold text-gray-450">Các yếu tố khác (Chỉ hiển thị các yếu tố ảnh hưởng lớn nhất)</span>
+                      <span className="font-bold text-gray-800">{otherSevPct.toFixed(2)}%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-[11px] sm:text-xs text-gray-550 leading-relaxed bg-gray-50 rounded-xl p-3 border border-gray-100/50">
+              Phần trọng số thể hiện tỷ lệ đóng góp của từng yếu tố vào giá trị dự đoán, không phải phần trăm tăng giảm phí trực tiếp.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Thông tin kỹ thuật mô hình */}
+      <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setTechExpanded(!techExpanded)}
+          className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <span className="font-bold text-gray-800 text-sm flex items-center gap-2">
+            <Shield className="w-4 h-4 text-gray-450" />
+            <span>Thông tin kỹ thuật mô hình</span>
+          </span>
+          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${techExpanded ? "rotate-180" : ""}`} />
+        </button>
+        {techExpanded && (
+          <div className="px-5 pb-5 border-t border-gray-50 pt-4 divide-y divide-gray-100 text-xs sm:text-sm text-gray-600 space-y-2.5">
+            <div className="flex justify-between items-center py-2">
+              <span>Phiên bản Frequency Model</span>
+              <span className="font-bold text-gray-850 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">{quote.frequencyModelVersion || "11"}</span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span>Phiên bản Severity Model</span>
+              <span className="font-bold text-gray-850 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">{quote.severityModelVersion || "1"}</span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span>Phương pháp giải thích</span>
+              <span className="font-bold text-gray-850 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">
+                {explanation?.frequencyExplanation?.method === "counterfactual" ? "Counterfactual Delta" : "SHAP"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span>Trạng thái giải thích</span>
+              <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">Khả dụng</span>
+            </div>
           </div>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+        <button onClick={onEdit} className="py-2.5 border border-gray-250 hover:bg-gray-50 rounded-xl text-sm font-bold text-gray-750">
+          Chỉnh sửa hồ sơ
+        </button>
+        <button onClick={onContinue} disabled={submitting} className="py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm">
+          {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+          <span>Tiếp tục mua</span>
+        </button>
       </div>
     </div>
   );
@@ -1100,19 +1327,12 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-xl bg-blue-50 p-4">
-              <p className="text-[10px] font-bold uppercase text-blue-400">Loading rate</p>
-              <p className="text-lg font-extrabold text-blue-700">{(Number(plan.loadingRate || 0) * 100).toLocaleString("vi-VN")}%</p>
+          <div className="rounded-2xl bg-blue-50/50 border border-blue-100/50 p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <p className="text-[10px] font-bold uppercase text-blue-500 tracking-wider">Số tiền bảo hiểm tối đa</p>
+              <p className="text-xl font-extrabold text-blue-750 mt-1">{formatMoney(plan.sumInsured)}</p>
             </div>
-            <div className="rounded-xl bg-gray-50 p-4">
-              <p className="text-[10px] font-bold uppercase text-gray-400">Số tiền bảo hiểm</p>
-              <p className="text-lg font-extrabold text-gray-800">{formatMoney(plan.sumInsured)}</p>
-            </div>
-            <div className="rounded-xl bg-emerald-50 p-4">
-              <p className="text-[10px] font-bold uppercase text-emerald-500">Schema risk</p>
-              <p className="text-sm font-bold text-emerald-700">{schema?.schemaVersion || "Fallback"}</p>
-            </div>
+            <Shield className="w-9 h-9 text-blue-400/80" />
           </div>
 
           {loading ? (

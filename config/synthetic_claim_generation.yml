@@ -1,0 +1,264 @@
+# =============================================================================
+# Synthetic Insurance Claim Data Generation Configuration
+# =============================================================================
+# NOTE: All coefficients below are SIMULATION PARAMETERS for illustrative
+# purposes only. They do NOT represent official actuarial pricing factors.
+# This dataset is SEMI-SYNTHETIC and is intended solely for demonstrating
+# the frequency-severity architecture. Do NOT use for actual pricing without
+# validation against real enterprise data.
+# =============================================================================
+
+meta:
+  version: "1.0.0"
+  description: "Synthetic claim generation config for frequency-severity pipeline"
+  data_type: "semi-synthetic"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reproducibility
+# ─────────────────────────────────────────────────────────────────────────────
+random_seed: 42
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paths (relative to project root)
+# ─────────────────────────────────────────────────────────────────────────────
+paths:
+  health_dataset: "data/health_insurance_cost_and_risk_dataset.csv"
+  portfolio_dataset: "data/health_insurance_portfolio.csv"
+  output_dir: "data/generated"
+  reports_dir: "ai-model-service/reports"
+  figures_dir: "ai-model-service/reports/figures"
+  synthetic_claims: "data/generated/synthetic_insurance_claims.csv"
+  frequency_training: "data/generated/frequency_training_dataset.csv"
+  severity_training: "data/generated/severity_training_dataset.csv"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Claim Frequency Model Parameters
+# ─────────────────────────────────────────────────────────────────────────────
+frequency:
+  # Whether to reuse n_medical_services from portfolio or simulate new claim_count
+  use_portfolio_claim_count: true
+
+  # Distribution family: "poisson" | "negative_binomial"
+  distribution: "negative_binomial"
+
+  # Overdispersion parameter for Negative Binomial (r in NB parameterisation)
+  # Higher value -> more like Poisson; lower -> more overdispersed
+  dispersion: 3.0
+
+  # Base expected frequency (claims per unit exposure per year)
+  # Calibrated to match portfolio mean n_medical_services / exposure
+  base_rate: 4.5
+
+  # ── Demographic effects ──────────────────────────────────────────────────
+  age_effect:
+    # Relative multiplier by age band (vs. 30-39 baseline = 1.0)
+    "18-29": 0.85
+    "30-39": 1.00
+    "40-49": 1.12
+    "50-59": 1.25
+    "60+":   1.40
+
+  gender_effect:
+    M: 1.00
+    F: 1.05   # slight utilisation difference
+
+  # ── Health profile effects (moderate, not extreme) ──────────────────────
+  smoker_effect:
+    "yes": 1.10   # +10% — intentionally moderate
+    "no":  1.00
+
+  bmi_effect:
+    UNDERWEIGHT: 0.98
+    NORMAL:      1.00
+    OVERWEIGHT:  1.05
+    OBESE:       1.12
+
+  pre_existing_effect:
+    "TRUE":  1.20
+    "FALSE": 1.00
+
+  blood_pressure_effect:
+    # Bucketed from systolic mmHg:  Normal <120 | Elevated 120-129 | High-1 130-139 | High-2 >=140
+    NORMAL:    1.00
+    ELEVATED:  1.05
+    HIGH_1:    1.10
+    HIGH_2:    1.18
+
+  exercise_effect:
+    Daily:   0.90
+    Weekly:  0.95
+    Rarely:  1.05
+    Never:   1.10
+
+  occupation_risk_effect:
+    low:      1.00
+    moderate: 1.05
+    high:     1.12
+
+  # ── Product / policy effects ─────────────────────────────────────────────
+  reimbursement_effect:
+    "Yes": 1.10
+    "No":  1.00
+
+  type_product_effect:
+    # Richer coverage -> higher utilisation tendency
+    S: 1.00
+    G: 1.08
+    E: 1.15
+
+  new_business_effect:
+    "Yes": 0.92   # new policies may have lower initial utilisation
+    "No":  1.00
+
+  # ── History effects ──────────────────────────────────────────────────────
+  prev_claim_effect:
+    # Per-unit multiplier on prev_claim_count
+    per_claim: 0.04   # 4% lift per previous claim (capped at 3.0x)
+    cap: 3.0
+
+  claim_free_effect:
+    # Multiplier for each full year without any claim
+    per_free_year: 0.95   # -5% per year, capped at 0.70
+    cap: 0.70
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Claim Severity Model Parameters
+# ─────────────────────────────────────────────────────────────────────────────
+severity:
+  # Distribution for per-claim severity simulation
+  # "lognormal" | "gamma"
+  distribution: "lognormal"
+
+  # Log-scale mean (mu) of per-claim severity  (in currency units)
+  # Calibrated from portfolio average_claim_severity on positive claims
+  base_log_mean: 5.5    # exp(5.5) ≈ 245 currency units per claim
+
+  # Log-scale standard deviation (sigma)
+  base_log_sigma: 0.75
+
+  # ── Health severity relativity ───────────────────────────────────────────
+  # Compression: compressed_relativity = 1 + alpha * log(raw_relativity)
+  compression_alpha: 0.35
+
+  # Hard clip for health relativity (simulation safeguard only)
+  relativity_min: 0.85
+  relativity_max: 1.30
+
+  # ── Health profile log-scale adjustments (additive to log_mean) ─────────
+  smoker_log_adj:
+    "yes":  0.10
+    "no":   0.00
+
+  bmi_log_adj:
+    UNDERWEIGHT:  0.00
+    NORMAL:       0.00
+    OVERWEIGHT:   0.05
+    OBESE:        0.12
+
+  pre_existing_log_adj:
+    "TRUE":  0.15
+    "FALSE": 0.00
+
+  blood_pressure_log_adj:
+    NORMAL:   0.00
+    ELEVATED: 0.04
+    HIGH_1:   0.08
+    HIGH_2:   0.13
+
+  exercise_log_adj:
+    Daily:   -0.05
+    Weekly:  -0.02
+    Rarely:   0.04
+    Never:    0.08
+
+  occupation_risk_log_adj:
+    low:       0.00
+    moderate:  0.04
+    high:      0.08
+
+  # ── Product / benefit design ─────────────────────────────────────────────
+  type_product_log_adj:
+    S: 0.00
+    G: 0.08
+    E: 0.15
+
+  reimbursement_log_adj:
+    "Yes": 0.06
+    "No":  0.00
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Health Profile Generation (portfolio enrichment)
+# ─────────────────────────────────────────────────────────────────────────────
+health_profile:
+  # "donor_sampling" | "conditional_distribution"
+  method: "donor_sampling"
+
+  # For donor matching: fields to match on
+  match_fields:
+    - age_band
+    - gender
+
+  # Age band edges (years)
+  age_bands:
+    edges: [18, 30, 40, 50, 60, 999]
+    labels: ["18-29", "30-39", "40-49", "50-59", "60+"]
+
+  # BMI band edges
+  bmi_bands:
+    edges: [0, 18.5, 25, 30, 999]
+    labels: ["UNDERWEIGHT", "NORMAL", "OVERWEIGHT", "OBESE"]
+
+  # Blood pressure bucketing (systolic mmHg)
+  bp_bands:
+    edges: [0, 120, 130, 140, 999]
+    labels: ["NORMAL", "ELEVATED", "HIGH_1", "HIGH_2"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# History Feature Generation
+# ─────────────────────────────────────────────────────────────────────────────
+history:
+  # If portfolio has longitudinal data (multiple periods per insured), use it.
+  use_longitudinal: true
+
+  # If no prior-year record exists, simulate history with these priors
+  synthetic_history:
+    # Probability insured had >=1 claim in prior year (given no observed record)
+    prior_claim_prob: 0.55
+    # Prior claim count distribution params (Poisson)
+    prior_claim_count_lambda: 3.5
+    # Prior cost per claim (lognormal)
+    prior_severity_log_mean: 5.5
+    prior_severity_log_sigma: 0.75
+    # Claim-free years if simulated (Poisson-like)
+    claim_free_years_lambda: 1.2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Output / Validation
+# ─────────────────────────────────────────────────────────────────────────────
+validation:
+  # Percentile thresholds for outlier detection
+  charge_outlier_percentile: 99
+
+  # Expected zero-claim rate range (sanity check)
+  expected_zero_claim_rate_min: 0.25
+  expected_zero_claim_rate_max: 0.75
+
+  # Minimum acceptable Pearson correlation between claim_count and age
+  # (should be slightly positive)
+  min_age_freq_corr: 0.0
+
+  # Sensitivity test: baseline profile definition
+  sensitivity_baseline:
+    age: 35
+    gender: "M"
+    bmi: 23.0
+    smoker: "no"
+    blood_pressure: "NORMAL"
+    pre_existing_condition: "FALSE"
+    exercise_frequency: "Weekly"
+    occupation_risk: "low"
+    type_product: "S"
+    reimbursement: "No"
+    exposure_time: 1.0
+    seniority_insured: 3
+    new_business: "No"

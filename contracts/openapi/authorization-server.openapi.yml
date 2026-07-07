@@ -1,0 +1,155 @@
+openapi: 3.0.3
+info:
+  title: Authorization Server
+  version: 1.0.0
+  description: Authentication, local user registration, token refresh and Google OAuth exchange.
+paths:
+  /login:
+    get:
+      summary: Render login page
+      responses:
+        "200":
+          description: Login HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+  /api/v1/users/register:
+    post:
+      summary: Register a local auth user and synchronize profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/v1/users/login:
+    post:
+      summary: Login with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: JWT token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+  /api/v1/users/refresh:
+    post:
+      summary: Refresh an access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Refreshed JWT token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid refresh token
+  /api/v1/oauth/google/exchange:
+    post:
+      summary: Exchange Google authorization code for application tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleCodeExchangeRequest"
+      responses:
+        "200":
+          description: JWT token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+components:
+  schemas:
+    CreateUserRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    GoogleCodeExchangeRequest:
+      type: object
+      required: [code]
+      additionalProperties: true
+      properties:
+        code:
+          type: string
+        redirectUri:
+          type: string
+    LoginResponse:
+      type: object
+      required: [accessToken, refreshToken, tokenType, expiresIn, refreshExpiresIn, role, userId]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+          format: int64
+        refreshExpiresIn:
+          type: integer
+          format: int64
+        role:
+          type: string
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          nullable: true
+        name:
+          type: string
+          nullable: true

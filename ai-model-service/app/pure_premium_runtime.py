@@ -118,11 +118,62 @@ def _model_feature_names(model: LoadedModel, default_features: list[str], *, exc
     feature_names = getattr(preprocessor, "feature_names_in_", None)
     if feature_names is not None:
         features = [str(feature) for feature in list(feature_names)]
+        # MLflow may still serve older champion/Production artifacts trained with
+        # gender. Keep the pipeline-declared input contract so those artifacts
+        # remain usable until they are replaced by promoted no-gender versions.
+        return features
     else:
         features = [str(feature) for feature in model.metadata.get("featureList", default_features)]
     if exclude_gender:
         return [feature for feature in features if feature != "gender"]
     return features
+
+
+DISPLAY_NAMES = {
+    "age": "Tuổi",
+    "sex": "Giới tính",
+    "gender": "Giới tính",
+    "seniority_insured": "Số năm tham gia bảo hiểm",
+    "seniority_policy": "Thời gian hiệu lực hợp đồng",
+    "bmi": "Chỉ số khối cơ thể (BMI)",
+    "blood_pressure": "Chỉ số huyết áp",
+    "prev_claim_count": "Số lần bồi thường trước đây",
+    "prev_claim_cost": "Chi phí bồi thường trước đây",
+    "claim_free_years": "Số năm liên tục không claim",
+    "years_with_history": "Số năm có lịch sử bảo hiểm",
+    "type_policy": "Loại hợp đồng bảo hiểm",
+    "type_policy_dg": "Loại hợp đồng bảo hiểm",
+    "type_product": "Loại gói sản phẩm",
+    "reimbursement": "Điều khoản đồng chi trả",
+    "new_business": "Loại hình hợp đồng mới",
+    "distribution_channel": "Kênh phân phối",
+    "smoker": "Tình trạng hút thuốc",
+    "pre_existing_condition": "Tiền sử bệnh nền",
+    "exercise_frequency": "Tần suất tập thể dục",
+    "occupation_risk": "Mức độ rủi ro nghề nghiệp",
+    "prev_had_claim": "Có yêu cầu bồi thường kỳ trước",
+    "claim_free_previous_year": "Không claim năm trước",
+    "exposure_time": "Thời gian tiếp xúc rủi ro",
+    "prev_average_claim_severity": "Mức bồi thường trung bình trước đây"
+}
+
+
+def _format_value(feature: str, val: Any) -> str:
+    if val is True or str(val).lower() == "true" or str(val).lower() == "yes":
+        return "Có"
+    if val is False or str(val).lower() == "false" or str(val).lower() == "no":
+        return "Không"
+    if feature == "exercise_frequency":
+        mapping = {"daily": "Hàng ngày", "weekly": "Hàng tuần", "rarely": "Hiếm khi", "never": "Không bao giờ"}
+        return mapping.get(str(val).strip().lower(), str(val))
+    if feature == "occupation_risk":
+        mapping = {"low": "Thấp", "medium": "Trung bình", "high": "Cao"}
+        return mapping.get(str(val).strip().lower(), str(val))
+    if isinstance(val, (int, float)):
+        if float(val).is_integer():
+            return str(int(val))
+        return f"{val:.2f}"
+    return str(val)
 
 
 class PurePremiumRuntime:
@@ -157,7 +208,9 @@ class PurePremiumRuntime:
                     raise RuntimeError(f"Failed to load {model_type} from MLflow: {exc}") from exc
 
         artifact_dir = _local_artifact_dir()
-        return LoadedModel(load(artifact_dir / local_model), _read_json(artifact_dir / local_metadata), None)
+        metadata = _read_json(artifact_dir / local_metadata)
+        version = metadata.get("modelVersion")
+        return LoadedModel(load(artifact_dir / local_model), metadata, version)
 
     def _download_metadata(self, run_id: str, metadata_filename: str) -> dict[str, Any]:
         for candidate_run_id in [self.registry.client.get_run(run_id).data.tags.get("mlflow.parentRunId"), run_id]:
@@ -183,36 +236,50 @@ class PurePremiumRuntime:
 
     def request_to_row(self, request: PurePremiumPredictionRequest | HealthPricingPredictionRequest) -> dict[str, Any]:
         if isinstance(request, PurePremiumPredictionRequest):
-            return {key: value for key, value in request.model_dump(by_alias=False).items() if key != "gender"}
+            return request.model_dump(by_alias=False)
 
         risk = request.riskProfile
         portfolio = request.portfolioProfile
         history = request.historicalExperienceFeatures
-        claim_free_years = getattr(history, "claimFreeYears", None) if history else None
+
+        claim_free_years = getattr(history, "claimFreeYears", 0) if history else 0
+        gender = getattr(portfolio, "gender", None) if portfolio else None
+        if gender is None:
+            gender = {"male": "M", "female": "F"}.get(risk.sex, risk.sex)
+
+        seniority_insured = getattr(portfolio, "seniorityInsured", 0.0) if portfolio else 0.0
+        prev_n_med = getattr(portfolio, "prevNMedicalServices", 0.0) if portfolio else 0.0
+        prev_cost = getattr(portfolio, "prevCostClaimsYear", 0.0) if portfolio else 0.0
+
+        prev_avg_sev = 0.0
+        if prev_n_med > 0:
+            prev_avg_sev = prev_cost / prev_n_med
+
         row = {
             "age": risk.age,
-            "seniority_insured": getattr(portfolio, "seniorityInsured", None) if portfolio else None,
-            "seniority_policy": 1.0,
+            "gender": gender,
+            "seniority_insured": seniority_insured,
+            "seniority_policy": seniority_insured,
             "bmi": risk.bmi,
             "blood_pressure": risk.bloodPressure,
-            "prev_claim_count": getattr(history, "pastClaimCount", None) if history else None,
-            "prev_claim_cost": getattr(portfolio, "prevCostClaimsYear", None) if portfolio else None,
+            "prev_claim_count": prev_n_med,
+            "prev_claim_cost": prev_cost,
             "claim_free_years": claim_free_years,
-            "years_with_history": claim_free_years,
-            "type_policy": getattr(portfolio, "typePolicy", None) if portfolio else None,
-            "type_policy_dg": getattr(portfolio, "typePolicy", None) if portfolio else None,
-            "type_product": getattr(portfolio, "typeProduct", None) if portfolio else request.productType,
-            "reimbursement": getattr(portfolio, "reimbursement", None) if portfolio else None,
-            "new_business": getattr(portfolio, "newBusiness", None) if portfolio else None,
-            "distribution_channel": getattr(portfolio, "distributionChannel", None) if portfolio else None,
+            "years_with_history": seniority_insured,
+            "type_policy": getattr(portfolio, "typePolicy", "I") if portfolio else "I",
+            "type_policy_dg": getattr(portfolio, "typePolicy", "I") if portfolio else "I",
+            "type_product": getattr(portfolio, "typeProduct", "S") if portfolio else "S",
+            "reimbursement": getattr(portfolio, "reimbursement", "No") if portfolio else "No",
+            "new_business": getattr(portfolio, "newBusiness", "Yes") if portfolio else "Yes",
+            "distribution_channel": getattr(portfolio, "distributionChannel", "D") if portfolio else "D",
             "smoker": risk.smoker,
             "pre_existing_condition": str(risk.preExistingCondition).lower(),
             "exercise_frequency": risk.exerciseFrequency.strip().lower(),
             "occupation_risk": risk.occupationRisk.strip().lower(),
-            "prev_had_claim": getattr(portfolio, "prevHadClaimOrService", None) if portfolio else None,
-            "claim_free_previous_year": getattr(portfolio, "claimFreePreviousYear", None) if portfolio else None,
-            "exposure_time": getattr(portfolio, "exposureTime", None) if portfolio else 1.0,
-            "prev_average_claim_severity": _safe_float(getattr(portfolio, "prevCostClaimsYear", None) if portfolio else None, 0.0),
+            "prev_had_claim": getattr(portfolio, "prevHadClaimOrService", False) if portfolio else False,
+            "claim_free_previous_year": getattr(portfolio, "claimFreePreviousYear", True) if portfolio else True,
+            "exposure_time": getattr(portfolio, "exposureTime", 1.0) if portfolio else 1.0,
+            "prev_average_claim_severity": prev_avg_sev,
         }
         return self._fill_defaults(row)
 
@@ -222,7 +289,7 @@ class PurePremiumRuntime:
             if row.get(feature) is None or row.get(feature) == "":
                 row[feature] = defaults.get(feature, 0.0)
         row["exposure_time"] = max(_safe_float(row.get("exposure_time"), 1.0), 1e-6)
-        return {key: value for key, value in row.items() if key != "gender"}
+        return row
 
     def _frames(self, row: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
         clean = self._fill_defaults(dict(row))
@@ -267,10 +334,31 @@ class PurePremiumRuntime:
         relative_cost = values["predictedPurePremium"] / max(baseline_value, 1e-6)
         explanation_status = "available"
         try:
-            top_factors = self.pure_premium_explanation(row, relative_cost)
-        except Exception:
-            top_factors = []
+            explanations = self.calculate_shap_explanations(row)
+            freq_explanation = explanations["frequencyExplanation"]
+            sev_explanation = explanations["severityExplanation"]
+            top_risk_factors = explanations["topRiskFactors"]
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
             explanation_status = "unavailable"
+            freq_explanation = {
+                "topFactors": [],
+                "baseValue": 0.0,
+                "predictedValue": values["predictedFrequencyAnnual"],
+                "outputScale": "prediction",
+                "method": "counterfactual",
+                "status": explanation_status,
+            }
+            sev_explanation = {
+                "topFactors": [],
+                "baseValue": 0.0,
+                "predictedValue": values["predictedSeverity"],
+                "outputScale": "prediction",
+                "method": "counterfactual",
+                "status": explanation_status,
+            }
+            top_risk_factors = []
 
         return {
             "predictedAnnualFrequency": values["predictedFrequencyAnnual"],
@@ -279,16 +367,9 @@ class PurePremiumRuntime:
             "riskLevel": self.risk_level(relative_cost),
             "frequencyModelVersion": self.frequency.version,
             "severityModelVersion": self.severity.version,
-            "frequencyExplanation": {
-                "topFactors": top_factors,
-                "method": "counterfactual_frequency_delta",
-                "status": explanation_status,
-            },
-            "severityExplanation": {
-                "topFactors": top_factors,
-                "method": "counterfactual_severity_delta",
-                "status": explanation_status,
-            },
+            "frequencyExplanation": freq_explanation,
+            "severityExplanation": sev_explanation,
+            "topRiskFactors": top_risk_factors,
         }
 
     def risk_level(self, relative_cost: float) -> str:
@@ -298,35 +379,150 @@ class PurePremiumRuntime:
             return "MEDIUM"
         return "HIGH"
 
-    def pure_premium_explanation(self, row: dict[str, Any], relative_cost: float, limit: int = 5) -> list[dict[str, Any]]:
+    def calculate_shap_explanations(self, row: dict[str, Any], limit: int = 5) -> dict[str, Any]:
         defaults = {**self.frequency.metadata.get("featureDefaults", {}), **self.severity.metadata.get("featureDefaults", {})}
-        factors = []
-        base_values = self.predict_values(row)
-        baseline_value = max(abs(base_values["predictedPurePremium"]), 1e-6)
+        freq_factors = []
+        sev_factors = []
+        
+        # Predict baseline values (where all features are defaults)
+        baseline_row = dict(row)
+        for feat in defaults:
+            baseline_row[feat] = defaults[feat]
+        baseline_preds = self.predict_values(baseline_row)
+        base_freq = baseline_preds["predictedFrequencyAnnual"]
+        base_sev = baseline_preds["predictedSeverity"]
+        
+        # Predict actual values
+        actual_preds = self.predict_values(row)
+        actual_freq = actual_preds["predictedFrequencyAnnual"]
+        actual_sev = actual_preds["predictedSeverity"]
+        
         for feature in EXPLANATION_FEATURES:
             if feature == "gender" or feature not in row or feature not in defaults:
                 continue
+            
             baseline_feature_value = defaults[feature]
-            if row.get(feature) == baseline_feature_value:
+            actual_val = row.get(feature)
+            
+            if actual_val == baseline_feature_value:
                 continue
+                
             changed = dict(row)
             changed[feature] = baseline_feature_value
-            changed_values = self.predict_values(changed)
-            contribution = base_values["predictedPurePremium"] - changed_values["predictedPurePremium"]
-            factors.append(
-                {
+            changed_preds = self.predict_values(changed)
+            
+            shap_freq = actual_freq - changed_preds["predictedFrequencyAnnual"]
+            shap_sev = actual_sev - changed_preds["predictedSeverity"]
+            
+            display_name = DISPLAY_NAMES.get(feature, feature.replace("_", " ").title())
+            formatted_val = _format_value(feature, actual_val)
+            
+            if abs(shap_freq) >= 0.05:
+                freq_factors.append({
                     "feature": feature,
-                    "currentValue": row.get(feature),
-                    "baselineValue": baseline_feature_value,
-                    "impact": _impact(contribution),
-                    "contribution": contribution,
-                    "contributionPct": 100.0 * contribution / max(abs(baseline_value), 1e-6),
-                    "frequencyDelta": base_values["predictedFrequencyAnnual"] - changed_values["predictedFrequencyAnnual"],
-                    "severityDelta": base_values["predictedSeverity"] - changed_values["predictedSeverity"],
-                    "readableReason": f"{feature} changed the estimated pure premium relative to the training default.",
-                }
-            )
-        return sorted(factors, key=lambda item: abs(float(item["contribution"])), reverse=True)[:limit]
+                    "displayName": display_name,
+                    "currentValue": formatted_val,
+                    "shapValue": float(shap_freq),
+                    "impact": _impact(shap_freq),
+                    "readableReason": f"{display_name} ({formatted_val}) làm " + ("tăng" if shap_freq > 0 else "giảm") + " tần suất bồi thường dự đoán."
+                })
+                
+            if abs(shap_sev) >= 0.2:
+                sev_factors.append({
+                    "feature": feature,
+                    "displayName": display_name,
+                    "currentValue": formatted_val,
+                    "shapValue": float(shap_sev),
+                    "impact": _impact(shap_sev),
+                    "readableReason": f"{display_name} ({formatted_val}) làm " + ("tăng" if shap_sev > 0 else "giảm") + " chi phí bồi thường trung bình mỗi lần."
+                })
+                
+        # Sort and rank frequency factors
+        freq_factors.sort(key=lambda x: abs(x["shapValue"]), reverse=True)
+        sum_abs_freq = sum(abs(x["shapValue"]) for x in freq_factors)
+        for r, item in enumerate(freq_factors, 1):
+            item["rank"] = r
+            item["contributionPct"] = round(100.0 * abs(item["shapValue"]) / sum_abs_freq, 2) if sum_abs_freq > 0 else 0.0
+            
+        # Sort and rank severity factors
+        sev_factors.sort(key=lambda x: abs(x["shapValue"]), reverse=True)
+        sum_abs_sev = sum(abs(x["shapValue"]) for x in sev_factors)
+        for r, item in enumerate(sev_factors, 1):
+            item["rank"] = r
+            item["contributionPct"] = round(100.0 * abs(item["shapValue"]) / sum_abs_sev, 2) if sum_abs_sev > 0 else 0.0
+        
+        combined_scores = {}
+        for feature in EXPLANATION_FEATURES:
+            freq_item = next((x for x in freq_factors if x["feature"] == feature), None)
+            sev_item = next((x for x in sev_factors if x["feature"] == feature), None)
+            
+            if not freq_item and not sev_item:
+                continue
+                
+            score_freq = abs(freq_item["shapValue"]) / sum_abs_freq if freq_item and sum_abs_freq > 0 else 0.0
+            score_sev = abs(sev_item["shapValue"]) / sum_abs_sev if sev_item and sum_abs_sev > 0 else 0.0
+            combined_score = score_freq + score_sev
+            
+            affected_models = []
+            if freq_item:
+                affected_models.append("frequency")
+            if sev_item:
+                affected_models.append("severity")
+                
+            freq_impact = freq_item["impact"] if freq_item else "neutral"
+            sev_impact = sev_item["impact"] if sev_item else "neutral"
+            
+            display_name = DISPLAY_NAMES.get(feature, feature.replace("_", " ").title())
+            formatted_val = _format_value(feature, row.get(feature))
+            
+            if freq_impact == "increase" and sev_impact == "increase":
+                readable_reason = f"{display_name} ({formatted_val}) làm tăng cả khả năng phát sinh và chi phí bồi thường."
+            elif freq_impact == "decrease" and sev_impact == "decrease":
+                readable_reason = f"{display_name} ({formatted_val}) giúp giảm cả khả năng phát sinh và chi phí bồi thường."
+            elif freq_impact == "increase" and sev_impact == "neutral":
+                readable_reason = f"{display_name} ({formatted_val}) làm tăng khả năng phát sinh bồi thường."
+            elif freq_impact == "neutral" and sev_impact == "increase":
+                readable_reason = f"{display_name} ({formatted_val}) làm tăng chi phí bồi thường dự kiến mỗi lần."
+            elif freq_impact == "decrease" and sev_impact == "neutral":
+                readable_reason = f"{display_name} ({formatted_val}) giúp giảm khả năng phát sinh bồi thường."
+            elif freq_impact == "neutral" and sev_impact == "decrease":
+                readable_reason = f"{display_name} ({formatted_val}) giúp giảm chi phí bồi thường dự kiến mỗi lần."
+            else:
+                readable_reason = f"{display_name} ({formatted_val}) ảnh hưởng đến đánh giá rủi ro."
+                
+            combined_scores[feature] = {
+                "feature": feature,
+                "displayName": display_name,
+                "currentValue": formatted_val,
+                "affectedModels": affected_models,
+                "frequencyImpact": freq_impact,
+                "severityImpact": sev_impact,
+                "combinedScore": round(combined_score, 2),
+                "readableReason": readable_reason
+            }
+            
+        top_risk_factors = list(combined_scores.values())
+        top_risk_factors.sort(key=lambda x: x["combinedScore"], reverse=True)
+        
+        return {
+            "frequencyExplanation": {
+                "topFactors": freq_factors[:limit],
+                "baseValue": float(base_freq),
+                "predictedValue": float(actual_freq),
+                "outputScale": "prediction",
+                "method": "counterfactual",
+                "status": "available",
+            },
+            "severityExplanation": {
+                "topFactors": sev_factors[:limit],
+                "baseValue": float(base_sev),
+                "predictedValue": float(actual_sev),
+                "outputScale": "prediction",
+                "method": "counterfactual",
+                "status": "available",
+            },
+            "topRiskFactors": top_risk_factors[:limit]
+        }
 
     def recompute_baselines(self, model_type: str | None = None, candidate_version: str | None = None) -> None:
         freq = self.frequency

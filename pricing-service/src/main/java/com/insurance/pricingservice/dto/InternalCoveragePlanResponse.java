@@ -10,5 +10,6 @@ public record InternalCoveragePlanResponse(
     String planName,
     BigDecimal sumInsured,
     BigDecimal loadingRate,
+    Boolean reimbursementEnabled,
     String status
 ) {}

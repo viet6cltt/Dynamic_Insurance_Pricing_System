@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dynamic-insurance-config
+data:
+  APP_CORS_ALLOWED_ORIGINS: "*"
+  CLIENT_APP_URI: "http://localhost:3000"
+  REDIRECT_URI: "http://localhost:3000/login/oauth2/code/custom"
+  ISSUER_URI: "http://localhost:30090"
+  INSURANCE_AS_URI: "http://localhost:30090"
+  INSURANCE_AS_JWK_URI: "http://authorization-server:9000/oauth2/jwks"
+  GOOGLE_AS_URI: "https://accounts.google.com"
+  GOOGLE_AS_JWK_URI: "https://www.googleapis.com/oauth2/v3/certs"
+  GOOGLE_CLIENT_ID: "your-google-client-id"
+  GOOGLE_CLIENT_SECRET: "your-google-client-secret"
+  GOOGLE_REDIRECT_PATH: "/login/oauth2/code/google"
+
+  EUREKA_SERVER_URL: "http://service-discovery:8761/eureka/"
+  POSTGRES_USER: "postgres"
+  POSTGRES_PORT: "5432"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+  PAYMENT_EVENTS_TOPIC: "payment.events"
+  POLICY_EVENTS_TOPIC: "policy.events"
+  PRICING_EVENTS_TOPIC: "pricing.events"
+
+  USER_SERVICE_URL: "http://user-service:8081"
+  USER_SERVICE_URI: "http://user-service:8081"
+  AUTH_SERVICE_URL: "http://authorization-server:9000"
+  PRODUCT_SERVICE_URL: "http://product-service:8082"
+  PRICING_SERVICE_URL: "http://pricing-service:8083"
+  POLICY_SERVICE_URL: "http://application-policy-service:8084"
+  PAYMENT_SERVICE_URL: "http://payment-service:8085"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:8086"
+  AI_MODEL_SERVICE_URL: "http://ai-model-service:8000"
+
+  MAIL_HOST: "mailpit"
+  MAIL_PORT: "1025"
+  MAIL_USERNAME: ""
+  MAIL_SMTP_AUTH: "false"
+  MAIL_SMTP_STARTTLS_ENABLE: "false"
+  MAIL_FROM: "no-reply@insurance.local"
+  MAIL_FROM_NAME: "Dynamic Insurance"
+
+  MINIO_ENDPOINT: "http://minio:9000"
+  MINIO_EXTERNAL_URL: "http://localhost:30902"
+  MINIO_ROOT_USER: "minioadmin"
+  SPRING_MINIO_ACCESS_KEY: "minioadmin"
+  SPRING_MINIO_BUCKET: "insurance-products"
+  MINIO_BUCKET_NAME: "insurance-products"
+
+  MODEL_ARTIFACT_DIR: "/app/ml/artifacts"
+  MODEL_SOURCE: "auto"
+  MLFLOW_TRACKING_URI: "http://mlflow-server:5000"
+  MLFLOW_POSTGRES_DB: "mlflow"
+  MLFLOW_POSTGRES_USER: "mlflow"
+  MLFLOW_S3_BUCKET: "mlflow-artifacts"
+  MLFLOW_S3_ACCESS_KEY_ID: "minioadmin"
+
+  CONTRACT_EXPIRY_REMINDER_DAYS: "7"
+  VND_PER_EUR: "27000"
+  HEALTH_RISK_LOG_ALPHA: "0.18"
+  HEALTH_FACTOR_MIN: "0.85"
+  HEALTH_FACTOR_MAX: "1.40"
+  PORTFOLIO_FACTOR_MIN: "0.85"
+  PORTFOLIO_FACTOR_MAX: "1.30"
+  PORTFOLIO_CREDIBILITY_K: "3.0"
+  PORTFOLIO_NEUTRAL_PREV_COST_CLAIMS_YEAR_EUR: "222.2"
+  PORTFOLIO_NEUTRAL_PREV_N_MEDICAL_SERVICES: "7.0"
+  PORTFOLIO_NEUTRAL_PREV_HAD_CLAIM_OR_SERVICE: "false"
+  PORTFOLIO_NEUTRAL_CLAIM_FREE_PREVIOUS_YEAR: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dynamic-insurance-secrets
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "postgres"
+  REDIS_PASSWORD: "secret_password"
+  CLIENT_ID: "insu-client"
+  CLIENT_SECRET: "insu-secret-key"
+  MAIL_PASSWORD: ""
+  MINIO_ROOT_PASSWORD: "minioadminpassword"
+  SPRING_MINIO_SECRET_KEY: "minioadminpassword"
+  MLFLOW_POSTGRES_PASSWORD: "mlflow"
+  MLFLOW_S3_SECRET_ACCESS_KEY: "minioadminpassword"

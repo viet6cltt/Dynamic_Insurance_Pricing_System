@@ -11,5 +11,20 @@ public record HealthPricingPredictionResponse(
     String frequencyModelVersion,
     String severityModelVersion,
     JsonNode frequencyExplanation,
-    JsonNode severityExplanation
-) {}
+    JsonNode severityExplanation,
+    JsonNode topRiskFactors
+) {
+    public HealthPricingPredictionResponse(
+        BigDecimal predictedAnnualFrequency,
+        BigDecimal predictedAverageSeverity,
+        BigDecimal purePremium,
+        String riskLevel,
+        String frequencyModelVersion,
+        String severityModelVersion,
+        JsonNode frequencyExplanation,
+        JsonNode severityExplanation
+    ) {
+        this(predictedAnnualFrequency, predictedAverageSeverity, purePremium, riskLevel,
+             frequencyModelVersion, severityModelVersion, frequencyExplanation, severityExplanation, null);
+    }
+}

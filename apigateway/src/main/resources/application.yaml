@@ -38,6 +38,7 @@ app:
     policy-service-url: ${POLICY_SERVICE_URL:http://localhost:8084}
     payment-service-url: ${PAYMENT_SERVICE_URL:http://localhost:8085}
     notification-service-url: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
+    ai-model-service-url: ${AI_MODEL_SERVICE_URL:http://localhost:8000}
   rate-limit:
     user-profile-update:
       enabled: ${USER_PROFILE_UPDATE_RATE_LIMIT_ENABLED:true}
@@ -80,6 +81,18 @@ server:
   tomcat:
     max-http-form-post-size: 30MB
     max-swallow-size: 30MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 logging:
   level:

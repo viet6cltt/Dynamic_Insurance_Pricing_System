@@ -120,6 +120,103 @@ services:
     networks:
       - dynamic-insurance
 
+  mlflow-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "${MLFLOW_POSTGRES_PORT:-5439}:5432"
+    environment:
+      POSTGRES_DB: ${MLFLOW_POSTGRES_DB:-mlflow}
+      POSTGRES_USER: ${MLFLOW_POSTGRES_USER:-mlflow}
+      POSTGRES_PASSWORD: ${MLFLOW_POSTGRES_PASSWORD:-mlflow}
+    volumes:
+      - mlflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MLFLOW_POSTGRES_USER:-mlflow} -d ${MLFLOW_POSTGRES_DB:-mlflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - dynamic-insurance
+
+  mlflow-minio-init:
+    image: minio/mc:RELEASE.2025-01-17T23-25-50Z
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "until mc alias set local http://minio:9000 ${MLFLOW_S3_ACCESS_KEY_ID:-minioadmin} ${MLFLOW_S3_SECRET_ACCESS_KEY:-minioadminpassword}; do
+        echo 'Waiting for MinIO...';
+        sleep 2;
+      done;
+      mc mb --ignore-existing local/${MLFLOW_S3_BUCKET:-mlflow-artifacts};
+      mc anonymous set none local/${MLFLOW_S3_BUCKET:-mlflow-artifacts};"
+    networks:
+      - dynamic-insurance
+
+  mlflow-server:
+    image: dynamic-insurance/mlflow-server:${IMAGE_TAG:-local}
+    build:
+      context: ./infra/docker/mlflow
+    restart: unless-stopped
+    ports:
+      - "${MLFLOW_TRACKING_PORT:-15000}:5000"
+    depends_on:
+      mlflow-postgres:
+        condition: service_healthy
+      mlflow-minio-init:
+        condition: service_completed_successfully
+    environment:
+      AWS_ACCESS_KEY_ID: ${MLFLOW_S3_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MLFLOW_S3_SECRET_ACCESS_KEY:-minioadminpassword}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --allowed-hosts
+      - localhost,localhost:15000,127.0.0.1,127.0.0.1:15000,mlflow-server,mlflow-server:5000
+      - --backend-store-uri
+      - postgresql://${MLFLOW_POSTGRES_USER:-mlflow}:${MLFLOW_POSTGRES_PASSWORD:-mlflow}@mlflow-postgres:5432/${MLFLOW_POSTGRES_DB:-mlflow}
+      - --artifacts-destination
+      - s3://${MLFLOW_S3_BUCKET:-mlflow-artifacts}
+      - --serve-artifacts
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)\" || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - dynamic-insurance
+
+  ai-model-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "${AI_MODEL_POSTGRES_PORT:-5440}:5432"
+    environment:
+      POSTGRES_DB: ${AI_MODEL_POSTGRES_DB:-ai_model_db}
+      POSTGRES_USER: ${AI_MODEL_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${AI_MODEL_POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ai_model_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AI_MODEL_POSTGRES_USER:-postgres} -d ${AI_MODEL_POSTGRES_DB:-ai_model_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - dynamic-insurance
+
   user-db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -306,6 +403,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      redis:
+        condition: service_started
     environment:
       PORT: 8082
       DB_HOST: product-db
@@ -315,6 +414,9 @@ services:
       DB_PASSWORD: postgres
       MINIO_ENDPOINT: http://minio:9000
       MINIO_EXTERNAL_URL: http://localhost:9002
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-secret_password}
 
   ai-model-service:
     image: dynamic-insurance/ai-model-service:${IMAGE_TAG:-local}
@@ -328,11 +430,40 @@ services:
       MODEL_ARTIFACT_DIR: /app/ml/artifacts
       MODEL_SOURCE: ${MODEL_SOURCE:-auto}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow-server:5000}
+      AI_MODEL_DATABASE_URL: postgresql+psycopg://${AI_MODEL_POSTGRES_USER:-postgres}:${AI_MODEL_POSTGRES_PASSWORD:-postgres}@ai-model-db:5432/${AI_MODEL_POSTGRES_DB:-ai_model_db}
+      REFERENCE_DATASET_PATH: /app/data/generated/synthetic_insurance_claims.csv
+      DATASET_VERSION: ${DATASET_VERSION:-generated-current}
+    depends_on:
+      mlflow-server:
+        condition: service_healthy
+      ai-model-db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - dynamic-insurance
+
+  model-trainer-worker:
+    image: dynamic-insurance/insurance-model-trainer:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: ai-model-service/trainer.Dockerfile
+    restart: unless-stopped
+    environment:
+      MODEL_ARTIFACT_DIR: /app/ml/artifacts
+      MODEL_SOURCE: mlflow
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow-server:5000}
+      AI_MODEL_DATABASE_URL: postgresql+psycopg://${AI_MODEL_POSTGRES_USER:-postgres}:${AI_MODEL_POSTGRES_PASSWORD:-postgres}@ai-model-db:5432/${AI_MODEL_POSTGRES_DB:-ai_model_db}
+      DATASET_VERSION: ${DATASET_VERSION:-generated-current}
+      TRAINER_POLL_SECONDS: ${TRAINER_POLL_SECONDS:-5}
+    depends_on:
+      ai-model-db:
+        condition: service_healthy
+      mlflow-server:
+        condition: service_healthy
     networks:
       - dynamic-insurance
 
@@ -363,6 +494,17 @@ services:
       USER_SERVICE_URL: http://user-service:8081
       POLICY_SERVICE_URL: http://application-policy-service:8084
       AI_MODEL_SERVICE_URL: http://ai-model-service:8000
+      VND_PER_EUR: ${VND_PER_EUR:-27000}
+      HEALTH_RISK_LOG_ALPHA: ${HEALTH_RISK_LOG_ALPHA:-0.18}
+      HEALTH_FACTOR_MIN: ${HEALTH_FACTOR_MIN:-0.85}
+      HEALTH_FACTOR_MAX: ${HEALTH_FACTOR_MAX:-1.40}
+      PORTFOLIO_FACTOR_MIN: ${PORTFOLIO_FACTOR_MIN:-0.85}
+      PORTFOLIO_FACTOR_MAX: ${PORTFOLIO_FACTOR_MAX:-1.30}
+      PORTFOLIO_CREDIBILITY_K: ${PORTFOLIO_CREDIBILITY_K:-3.0}
+      PORTFOLIO_NEUTRAL_PREV_COST_CLAIMS_YEAR_EUR: ${PORTFOLIO_NEUTRAL_PREV_COST_CLAIMS_YEAR_EUR:-222.2}
+      PORTFOLIO_NEUTRAL_PREV_N_MEDICAL_SERVICES: ${PORTFOLIO_NEUTRAL_PREV_N_MEDICAL_SERVICES:-7.0}
+      PORTFOLIO_NEUTRAL_PREV_HAD_CLAIM_OR_SERVICE: ${PORTFOLIO_NEUTRAL_PREV_HAD_CLAIM_OR_SERVICE:-false}
+      PORTFOLIO_NEUTRAL_CLAIM_FREE_PREVIOUS_YEAR: ${PORTFOLIO_NEUTRAL_CLAIM_FREE_PREVIOUS_YEAR:-false}
 
   application-policy-service:
     <<: *spring-app
@@ -494,6 +636,63 @@ services:
       POLICY_SERVICE_URL: http://application-policy-service:8084
       PAYMENT_SERVICE_URL: http://payment-service:8085
       NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      AI_MODEL_SERVICE_URL: http://ai-model-service:8000
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      service-discovery:
+        condition: service_started
+      authorization-server:
+        condition: service_started
+      user-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+      ai-model-service:
+        condition: service_started
+      pricing-service:
+        condition: service_started
+      application-policy-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      apigateway:
+        condition: service_started
+    networks:
+      - dynamic-insurance
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_DEFAULT_THEME: light
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/dynamic-insurance-http.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - dynamic-insurance
 
 networks:
   dynamic-insurance:
@@ -509,3 +708,7 @@ volumes:
   payment_db_data:
   notification_db_data:
   minio_data:
+  mlflow_postgres_data:
+  ai_model_db_data:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,238 @@
+openapi: 3.0.3
+info:
+  title: Application Policy Service
+  version: 1.0.0
+  description: Insurance contract creation, payment trigger and policy experience summaries.
+paths:
+  /contracts:
+    post:
+      summary: Create an insurance contract from a quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContractRequest"
+      responses:
+        "201":
+          description: Created contract
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractResponse"
+  /contracts/me:
+    get:
+      summary: List current user's contracts
+      responses:
+        "200":
+          description: Contracts owned by current user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContractResponse"
+  /contracts/claims/me:
+    get:
+      summary: List current user's claim experience records
+      responses:
+        "200":
+          description: Claim history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClaimHistoryResponse"
+  /contracts/{contractId}:
+    get:
+      summary: Get contract by ID
+      parameters:
+        - $ref: "#/components/parameters/contractId"
+      responses:
+        "200":
+          description: Contract
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractResponse"
+  /contracts/{contractId}/pay:
+    post:
+      summary: Trigger payment for a pending or failed contract
+      parameters:
+        - $ref: "#/components/parameters/contractId"
+      responses:
+        "200":
+          description: Updated contract
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractResponse"
+  /internal/customers/{customerId}/claim-history-summary:
+    get:
+      summary: Get claim and policy experience summary for pricing
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: productType
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Policy experience summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyExperienceSummaryResponse"
+components:
+  parameters:
+    contractId:
+      name: contractId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    CreateContractRequest:
+      type: object
+      required: [quoteId, insuredPersonId, productId, coveragePlanId]
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        insuredPersonId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        coveragePlanId:
+          type: string
+          format: uuid
+        simulatePaymentResult:
+          type: string
+          nullable: true
+          enum: [SUCCESS, FAILED, EXPIRED]
+    ContractResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        applicantUserId:
+          type: string
+          format: uuid
+        insuredPersonId:
+          type: string
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        coveragePlanId:
+          type: string
+          format: uuid
+        productType:
+          type: string
+        typePolicy:
+          type: string
+          nullable: true
+        reimbursement:
+          type: string
+          nullable: true
+        distributionChannel:
+          type: string
+          nullable: true
+        quotedPremium:
+          type: number
+        purePremium:
+          type: number
+        loadingRate:
+          type: number
+        sumInsured:
+          type: number
+        effectiveDate:
+          type: string
+          format: date
+          nullable: true
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+        paymentId:
+          type: string
+          format: uuid
+          nullable: true
+        paymentStatus:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ClaimHistoryResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        recordId:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+          nullable: true
+        insuredPersonId:
+          type: string
+          format: uuid
+        productType:
+          type: string
+        experienceDate:
+          type: string
+          format: date
+        claimAmount:
+          type: number
+        nMedicalServices:
+          type: integer
+        hadClaimOrService:
+          type: boolean
+    PolicyExperienceSummaryResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        pastClaimCount:
+          type: integer
+        totalPastClaimAmount:
+          type: number
+        claimFreeYears:
+          type: integer
+        recencyWeightedClaimScore:
+          type: number
+        prevCostClaimsYear:
+          type: number
+        prevNMedicalServices:
+          type: number
+        prevHadClaimOrService:
+          type: boolean
+        claimFreePreviousYear:
+          type: boolean
+        seniorityInsured:
+          type: number
+        activePolicyCount:
+          type: integer
+        completedPolicyCount:
+          type: integer

@@ -36,6 +36,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PricingQuoteService {
 
+    private static final double DEFAULT_EXPOSURE_TIME = 1.0;
+    private static final String DEFAULT_DISTRIBUTION_CHANNEL = "D";
+    private static final String DEFAULT_TYPE_POLICY = "I";
+
     private final PremiumQuoteRepository quoteRepository;
     private final PricingInputSnapshotRepository snapshotRepository;
     private final PricingExplanationRepository explanationRepository;
@@ -149,9 +153,20 @@ public class PricingQuoteService {
         }
 
         // 7. Fetch Claim History from Policy service (with mock fallback)
-        ClaimHistorySummaryResponse claimHistory = fetchClaimHistory(request.insuredPersonId(), coveragePlan.productType());
+        ClaimHistorySummaryResponse claimHistory = fetchClaimHistory(request.insuredPersonId(),
+                coveragePlan.productType());
         double prevCostClaimsYearEur = vndToEur(claimHistory.prevCostClaimsYear());
         double totalPastClaimAmountEur = vndToEur(claimHistory.totalPastClaimAmount());
+        String planTier = mapPlanNameToTier(coveragePlan.planName());
+        String aiTypeProduct = mapTierToAiTypeProduct(planTier);
+        String aiTypePolicy = mapCoveragePlanToAiTypePolicy();
+        Boolean reimbursementVal = request.reimbursementEnabled();
+        if (reimbursementVal == null) {
+            reimbursementVal = coveragePlan.reimbursementEnabled();
+        }
+        String aiReimbursement = mapCoveragePlanToAiReimbursement(reimbursementVal);
+        String aiNewBusiness = mapHistoricalExperienceToAiNewBusiness(claimHistory);
+        String aiDistributionChannel = DEFAULT_DISTRIBUTION_CHANNEL;
 
         // 8. Build prediction payload
         HealthRiskProfile healthRiskProfile = new HealthRiskProfile(
@@ -167,13 +182,13 @@ public class PricingQuoteService {
 
         PortfolioPricingProfile portfolioProfile = new PortfolioPricingProfile(
                 gender,
-                coveragePlan.productType(),
-                "STANDARD",
-                "FULL",
-                1.0,
-                1.0,
-                "YES",
-                "DIRECT",
+                aiTypeProduct,
+                aiTypePolicy,
+                aiReimbursement,
+                DEFAULT_EXPOSURE_TIME,
+                claimHistory.seniorityInsured() != null ? claimHistory.seniorityInsured() : 0.0,
+                aiNewBusiness,
+                aiDistributionChannel,
                 prevCostClaimsYearEur,
                 claimHistory.prevNMedicalServices(),
                 claimHistory.prevHadClaimOrService(),
@@ -191,6 +206,12 @@ public class PricingQuoteService {
                 portfolioProfile,
                 historicalExperience);
 
+        try {
+            log.info("Sending prediction request to AI Model Service. Payload: {}", objectMapper.writeValueAsString(predictionRequest));
+        } catch (Exception e) {
+            log.warn("Failed to serialize prediction request for logging: {}", e.getMessage());
+        }
+
         // 9. Invoke AI Model Service
         HealthPricingPredictionResponse predictionResponse = null;
         String predictionStatus = "SUCCESS";
@@ -203,11 +224,13 @@ public class PricingQuoteService {
             log.error("AI Model Service call failed: {}", e.getMessage(), e);
         }
 
-        BigDecimal predictedFrequency = BigDecimal.ZERO.setScale(RatingEngine.FREQUENCY_SCALE, RatingEngine.ROUNDING_MODE);
+        BigDecimal predictedFrequency = BigDecimal.ZERO.setScale(RatingEngine.FREQUENCY_SCALE,
+                RatingEngine.ROUNDING_MODE);
         BigDecimal predictedSeverity = BigDecimal.ZERO.setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
         BigDecimal aiPurePremium = BigDecimal.ZERO.setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
         BigDecimal purePremium = BigDecimal.ZERO.setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
-        BigDecimal loadingRate = coveragePlan.loadingRate().setScale(RatingEngine.RATE_SCALE, RatingEngine.ROUNDING_MODE);
+        BigDecimal loadingRate = coveragePlan.loadingRate().setScale(RatingEngine.RATE_SCALE,
+                RatingEngine.ROUNDING_MODE);
         BigDecimal finalPremium = BigDecimal.ZERO.setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
         String frequencyModelVersion = null;
         String severityModelVersion = null;
@@ -223,10 +246,8 @@ public class PricingQuoteService {
         if ("SUCCESS".equals(predictionStatus) && predictionResponse != null) {
             predictedFrequency = predictionResponse.predictedAnnualFrequency()
                     .setScale(RatingEngine.FREQUENCY_SCALE, RatingEngine.ROUNDING_MODE);
-            predictedSeverity = predictionResponse.predictedAverageSeverity()
-                    .setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
-            aiPurePremium = predictionResponse.purePremium()
-                    .setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
+            predictedSeverity = eurToVnd(predictionResponse.predictedAverageSeverity());
+            aiPurePremium = eurToVnd(predictionResponse.purePremium());
             purePremium = ratingEngine.calculatePurePremium(predictedFrequency, predictedSeverity);
             finalPremium = ratingEngine.calculateFinalPremium(purePremium, loadingRate);
             purePremiumRecalculated = purePremium.subtract(aiPurePremium).abs().compareTo(new BigDecimal("0.01")) > 0;
@@ -234,10 +255,14 @@ public class PricingQuoteService {
             frequencyModelVersion = predictionResponse.frequencyModelVersion();
             severityModelVersion = predictionResponse.severityModelVersion();
             frequencyExplanation = predictionResponse.frequencyExplanation();
-            severityExplanation = predictionResponse.severityExplanation();
-            topRiskFactors = mergeExplanationItems(frequencyExplanation, severityExplanation, "topFactors", 8);
-            shapValues = mergeExplanationItems(frequencyExplanation, severityExplanation, "shapValues", 10);
+            JsonNode rawSeverityExplanation = predictionResponse.severityExplanation();
+            severityExplanation = convertSeverityExplanationToVnd(rawSeverityExplanation);
+            topRiskFactors = predictionResponse.topRiskFactors() != null && !predictionResponse.topRiskFactors().isNull()
+                    ? predictionResponse.topRiskFactors()
+                    : mergeExplanationItems(frequencyExplanation, rawSeverityExplanation, "topFactors", 8);
+            shapValues = mergeExplanationItems(frequencyExplanation, rawSeverityExplanation, "shapValues", 10);
             approximate = purePremiumRecalculated;
+            explanationMethod = "shap";
         }
 
         // 10. Save Quote aggregate
@@ -292,6 +317,7 @@ public class PricingQuoteService {
         ObjectNode auditResponse = predictionResponse != null
                 ? objectMapper.valueToTree(predictionResponse)
                 : objectMapper.createObjectNode();
+        auditResponse.put("vndPerEur", vndPerEur);
         auditResponse.put("pricingServicePurePremium", purePremium);
         auditResponse.put("aiPurePremium", aiPurePremium);
         auditResponse.put("purePremiumRecalculated", purePremiumRecalculated);
@@ -323,7 +349,8 @@ public class PricingQuoteService {
                     "PremiumQuoteFailed",
                     null,
                     null));
-            throw new IllegalStateException("AI Model Service failed to generate frequency-severity prediction: " + errorMessage);
+            throw new IllegalStateException(
+                    "AI Model Service failed to generate frequency-severity prediction: " + errorMessage);
         }
 
         return mapToResponse(savedQuote, explanation);
@@ -416,7 +443,8 @@ public class PricingQuoteService {
     public ValidateQuoteResponse validateQuote(UUID quoteId, ValidateQuoteRequest request) {
         PremiumQuote quote = quoteRepository.findById(quoteId).orElse(null);
         if (quote == null) {
-            return new ValidateQuoteResponse(false, quoteId, null, null, null, null, null, null, null, "NOT_FOUND", null);
+            return new ValidateQuoteResponse(false, quoteId, null, null, null, null, null, null, null, "NOT_FOUND",
+                    null);
         }
 
         boolean valid = true;
@@ -496,6 +524,44 @@ public class PricingQuoteService {
         return "no";
     }
 
+    private String mapPlanNameToTier(String planName) {
+        String normalized = planName == null ? "" : planName.trim().toLowerCase();
+        if (normalized.contains("premium")) {
+            return "PREMIUM";
+        }
+        return "STANDARD";
+    }
+
+    private String mapTierToAiTypeProduct(String tier) {
+        if ("PREMIUM".equals(tier)) {
+            return "P";
+        }
+        return "S";
+    }
+
+    private String mapCoveragePlanToAiTypePolicy() {
+        return DEFAULT_TYPE_POLICY;
+    }
+
+    private String mapCoveragePlanToAiReimbursement(Boolean reimbursementEnabled) {
+        if (Boolean.TRUE.equals(reimbursementEnabled)) {
+            return "Yes";
+        }
+        return "No";
+    }
+
+    private String mapHistoricalExperienceToAiNewBusiness(ClaimHistorySummaryResponse claimHistory) {
+        if (claimHistory == null) {
+            return "Yes";
+        }
+        int activeCount = claimHistory.activePolicyCount() != null ? claimHistory.activePolicyCount() : 0;
+        int completedCount = claimHistory.completedPolicyCount() != null ? claimHistory.completedPolicyCount() : 0;
+        if (activeCount == 0 && completedCount == 0) {
+            return "Yes";
+        }
+        return "No";
+    }
+
     private ClaimHistorySummaryResponse fetchClaimHistory(UUID customerId, String productType) {
         try {
             return applicationPolicyServiceClient.getClaimHistorySummary(customerId, productType);
@@ -504,13 +570,16 @@ public class PricingQuoteService {
             return new ClaimHistorySummaryResponse(
                     0,
                     0.0,
-                    5,
+                    0,
                     0.0,
                     0.0,
                     0.0,
                     false,
                     true,
-                    0.0);
+                    0.0,
+                    0.0,
+                    0,
+                    0);
         }
     }
 
@@ -525,7 +594,59 @@ public class PricingQuoteService {
         return amountVnd / vndPerEur;
     }
 
-    private ArrayNode mergeExplanationItems(JsonNode frequencyExplanation, JsonNode severityExplanation, String fieldName, int limit) {
+    private BigDecimal eurToVnd(BigDecimal amountEur) {
+        if (amountEur == null || amountEur.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO.setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
+        }
+        if (vndPerEur <= 0) {
+            log.warn("Invalid app.currency.vnd-per-eur value: {}. Falling back to unconverted EUR amount.", vndPerEur);
+            return amountEur.setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
+        }
+        return amountEur.multiply(BigDecimal.valueOf(vndPerEur))
+                .setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
+    }
+
+    private JsonNode convertSeverityExplanationToVnd(JsonNode severityExplanation) {
+        if (severityExplanation == null || severityExplanation.isNull()) {
+            return severityExplanation;
+        }
+        if (vndPerEur <= 0) {
+            return severityExplanation;
+        }
+        ObjectNode objectNode = severityExplanation.deepCopy();
+
+        if (objectNode.has("baseValue")) {
+            double baseValEur = objectNode.get("baseValue").asDouble();
+            BigDecimal baseValVnd = BigDecimal.valueOf(baseValEur).multiply(BigDecimal.valueOf(vndPerEur))
+                    .setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
+            objectNode.put("baseValue", baseValVnd);
+        }
+
+        if (objectNode.has("predictedValue")) {
+            double predValEur = objectNode.get("predictedValue").asDouble();
+            BigDecimal predValVnd = BigDecimal.valueOf(predValEur).multiply(BigDecimal.valueOf(vndPerEur))
+                    .setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
+            objectNode.put("predictedValue", predValVnd);
+        }
+
+        if (objectNode.has("topFactors") && objectNode.get("topFactors").isArray()) {
+            ArrayNode topFactors = (ArrayNode) objectNode.get("topFactors");
+            for (int i = 0; i < topFactors.size(); i++) {
+                JsonNode factor = topFactors.get(i);
+                if (factor instanceof ObjectNode factorObj && factorObj.has("shapValue")) {
+                    double shapEur = factorObj.get("shapValue").asDouble();
+                    BigDecimal shapVnd = BigDecimal.valueOf(shapEur).multiply(BigDecimal.valueOf(vndPerEur))
+                            .setScale(RatingEngine.MONEY_SCALE, RatingEngine.ROUNDING_MODE);
+                    factorObj.put("shapValue", shapVnd);
+                }
+            }
+        }
+
+        return objectNode;
+    }
+
+    private ArrayNode mergeExplanationItems(JsonNode frequencyExplanation, JsonNode severityExplanation,
+            String fieldName, int limit) {
         List<JsonNode> items = new ArrayList<>();
         collectExplanationItems(items, frequencyExplanation, fieldName, "frequency");
         collectExplanationItems(items, severityExplanation, fieldName, "severity");

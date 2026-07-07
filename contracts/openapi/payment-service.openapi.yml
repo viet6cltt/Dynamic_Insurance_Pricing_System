@@ -1,0 +1,109 @@
+openapi: 3.0.3
+info:
+  title: Payment Service
+  version: 1.0.0
+  description: Mock payment creation and payment lookup.
+paths:
+  /payments/mock:
+    post:
+      summary: Create a mock payment
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: X-Correlation-Id
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMockPaymentRequest"
+      responses:
+        "201":
+          description: Created payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+  /payments/{paymentId}:
+    get:
+      summary: Get payment by ID
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+components:
+  schemas:
+    CreateMockPaymentRequest:
+      type: object
+      required: [contractId, quoteId, payerUserId, amount, currency, paymentMethod]
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        payerUserId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        currency:
+          type: string
+          example: VND
+        paymentMethod:
+          type: string
+        simulateResult:
+          type: string
+          nullable: true
+          enum: [SUCCESS, FAILED, EXPIRED]
+    PaymentResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        payerUserId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        currency:
+          type: string
+        paymentMethod:
+          type: string
+        provider:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true

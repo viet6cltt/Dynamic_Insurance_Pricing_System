@@ -87,6 +87,75 @@ Kết quả báo giá lưu snapshot `loadingRate`, `purePremium`, `finalPremium`
 phiên bản frequency/severity model và explanation để báo giá cũ không đổi khi
 admin chỉnh Coverage Plan sau này.
 
+## Kiểm Thử Và Báo Cáo Coverage
+
+Các Spring Boot service chính được kiểm thử bằng JUnit 5, Mockito và JaCoCo.
+Mỗi service sinh ra hai nhóm report:
+
+- Surefire report: `target/surefire-reports`
+- JaCoCo report: `target/site/jacoco`
+
+Các service hiện có unit test chính:
+
+- `user-service`
+- `product-service`
+- `payment-service`
+- `pricing-service`
+- `application-policy-service`
+- `notification-service`
+
+Chạy test và sinh JaCoCo report cho một service:
+
+```bash
+cd pricing-service
+./mvnw org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report
+cd ..
+```
+
+Chạy test và sinh JaCoCo report cho toàn bộ các service chính:
+
+```bash
+for service in \
+  user-service \
+  product-service \
+  payment-service \
+  pricing-service \
+  application-policy-service \
+  notification-service
+do
+  (cd "$service" && ./mvnw org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report)
+done
+```
+
+Sau khi chạy test, sinh trang tổng hợp kết quả:
+
+```bash
+python3 scripts/generate-service-test-report.py
+```
+
+Trang tổng hợp được tạo tại:
+
+```text
+test-report/index.html
+```
+
+Để xem trang tổng hợp cùng các link JaCoCo chi tiết trong trình duyệt, chạy
+static server từ thư mục root của project:
+
+```bash
+python3 -m http.server 8080
+```
+
+Sau đó mở:
+
+```text
+http://localhost:8080/test-report/
+```
+
+Dashboard tổng hợp hiển thị số lượng test, số test lỗi, số test bị bỏ qua,
+thời gian chạy, coverage theo từng service, coverage theo từng class trong tầng
+`service`, và link đến report JaCoCo chi tiết của từng service.
+
 ## Recommended Local Flow
 
 Install dependencies:

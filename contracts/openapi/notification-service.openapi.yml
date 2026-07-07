@@ -1,0 +1,201 @@
+openapi: 3.0.3
+info:
+  title: Notification Service
+  version: 1.0.0
+  description: User notifications and email delivery administration.
+paths:
+  /notifications:
+    get:
+      summary: List current user's notifications
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paged notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagedNotificationResponse"
+  /notifications/unread-count:
+    get:
+      summary: Count unread notifications for current user
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnreadCountResponse"
+  /notifications/{notificationId}/read:
+    patch:
+      summary: Mark a notification as read
+      parameters:
+        - $ref: "#/components/parameters/notificationId"
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationResponse"
+  /notifications/read-all:
+    patch:
+      summary: Mark all current user's notifications as read
+      responses:
+        "200":
+          description: Number of updated notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+  /notifications/{notificationId}/archive:
+    patch:
+      summary: Archive a notification
+      parameters:
+        - $ref: "#/components/parameters/notificationId"
+      responses:
+        "200":
+          description: Archived notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationResponse"
+  /notifications/admin/email-deliveries:
+    get:
+      summary: List email deliveries for admin
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Email deliveries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmailDeliveryResponse"
+  /notifications/admin/email-deliveries/{deliveryId}/retry:
+    post:
+      summary: Retry an email delivery
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Retried email delivery
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailDeliveryResponse"
+components:
+  parameters:
+    notificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    NotificationResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        notificationId:
+          type: string
+          format: uuid
+        recipientUserId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+        channel:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    PagedNotificationResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationResponse"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationResponse"
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+    UnreadCountResponse:
+      type: object
+      properties:
+        unreadCount:
+          type: integer
+    EmailDeliveryResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        deliveryId:
+          type: string
+          format: uuid
+        notificationId:
+          type: string
+          format: uuid
+        recipientEmail:
+          type: string
+          format: email
+        status:
+          type: string
+        retryCount:
+          type: integer
+        lastError:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time

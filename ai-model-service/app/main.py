@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response
+from prometheus_client import CONTENT_TYPE_LATEST, Histogram, generate_latest
 from sqlalchemy.exc import IntegrityError
 
 from .db import init_db
@@ -30,6 +33,61 @@ from .schemas import (
 
 
 app = FastAPI(title="AI Model Service", version="1.0.0")
+
+REQUEST_LATENCY = Histogram(
+    "http_server_requests_seconds",
+    "HTTP server request latency.",
+    ("application", "method", "uri", "status", "outcome", "exception"),
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+
+
+def route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    return getattr(route, "path", request.url.path)
+
+
+def status_outcome(status_code: int) -> str:
+    if 100 <= status_code < 200:
+        return "INFORMATIONAL"
+    if 200 <= status_code < 300:
+        return "SUCCESS"
+    if 300 <= status_code < 400:
+        return "REDIRECTION"
+    if 400 <= status_code < 500:
+        return "CLIENT_ERROR"
+    return "SERVER_ERROR"
+
+
+@app.middleware("http")
+async def prometheus_http_metrics(request: Request, call_next):
+    if request.url.path == "/metrics":
+        return await call_next(request)
+
+    start_time = time.perf_counter()
+    status_code = 500
+    exception_name = "None"
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception as exc:
+        exception_name = exc.__class__.__name__
+        raise
+    finally:
+        REQUEST_LATENCY.labels(
+            application="ai-model-service",
+            method=request.method,
+            uri=route_template(request),
+            status=str(status_code),
+            outcome=status_outcome(status_code),
+            exception=exception_name,
+        ).observe(time.perf_counter() - start_time)
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.on_event("startup")

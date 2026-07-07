@@ -32,6 +32,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(headerFilterAuth(), UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/internal/**").hasRole("SYSTEM")
                         .requestMatchers("/pricing/**").hasAnyRole("USER", "MANAGER", "ADMIN")
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**").permitAll()
@@ -44,6 +45,7 @@ public class SecurityConfig {
         return new OncePerRequestFilter() {
 
             private final List<String> publicPaths = List.of(
+                    "/actuator/",
                     "/swagger-ui/",
                     "/v3/api-docs",
                     "/swagger-resources/",

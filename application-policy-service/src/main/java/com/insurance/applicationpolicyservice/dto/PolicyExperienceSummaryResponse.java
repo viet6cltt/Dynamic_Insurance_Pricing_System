@@ -9,5 +9,8 @@ public record PolicyExperienceSummaryResponse(
     Double prevNMedicalServices,
     Boolean prevHadClaimOrService,
     Boolean claimFreePreviousYear,
-    Double historicalExposureYears
+    Double historicalExposureYears,
+    Double seniorityInsured,
+    Integer activePolicyCount,
+    Integer completedPolicyCount
 ) {}
