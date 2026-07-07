@@ -21,33 +21,134 @@ finalPremium =
 decimal: `0.10` means 10%, `0.20` means 20%. Risk level is display/explanation
 metadata only; it is not used in the final premium formula.
 
+## Chạy Bằng Docker Compose
+
+File compose đầy đủ nằm ở `docker-compose.full.yml`. File này dựng backend,
+các database, Kafka, Redis, MinIO, MLflow, Mailpit, Prometheus và Grafana.
+Frontend hiện chạy riêng bằng Vite.
+
+Chuẩn bị biến môi trường ở root project:
+
+```bash
+cp docker-compose.full.env.example .env
+```
+
+Sửa `.env` trước khi chạy nếu dùng OAuth/SMTP thật. Các biến quan trọng:
+
+| Biến | Khi nào cần | Ghi chú |
+| --- | --- | --- |
+| `GOOGLE_CLIENT_ID` | Bắt buộc nếu bật đăng nhập Google thật | OAuth Client ID trong Google Cloud Console. |
+| `GOOGLE_CLIENT_SECRET` | Bắt buộc nếu bật đăng nhập Google thật | Chỉ đặt ở backend/root `.env`, không đưa vào frontend. |
+| `GOOGLE_REDIRECT_PATH` | Bắt buộc nếu khác mặc định | Mặc định `/login/oauth2/code/google`. |
+| `CLIENT_APP_URI` | Khi frontend không chạy ở `http://localhost:3000` | Cũng dùng để build Google redirect URL. |
+| `APP_CORS_ALLOWED_ORIGINS` | Khi frontend đổi host/port | Ví dụ `http://localhost:3000`. |
+| `CLIENT_SECRET` | Khi dùng OAuth client nội bộ thật | Mặc định dev là `insu-secret-key`; đổi khi chạy môi trường chia sẻ. |
+| `REDIS_PASSWORD` | Nên đổi ngoài local dev | Phải khớp Redis, API Gateway và Product Service. |
+| `MAIL_*` | Chỉ cần khi gửi mail thật | Mặc định dùng Mailpit local, không cần username/password. |
+| `MLFLOW_POSTGRES_PASSWORD` | Nên đổi ngoài local dev | Mật khẩu Postgres cho MLflow. |
+| `MLFLOW_S3_SECRET_ACCESS_KEY` | Nên đổi ngoài local dev | Secret key MinIO/S3 cho MLflow artifacts. |
+| `GRAFANA_ADMIN_PASSWORD` | Nên đổi ngoài local dev | Mặc định là `admin`. |
+
+Với Google OAuth, trong Google Cloud Console cần cấu hình Authorized redirect
+URI khớp với frontend:
+
+```text
+http://localhost:3000/login/oauth2/code/google
+```
+
+Frontend cũng cần public Google client id, nhưng không được chứa client secret:
+
+```bash
+cp frontend/.env.example frontend/.env
+```
+
+Sửa `frontend/.env`:
+
+```text
+VITE_API_URL=http://localhost:8080
+VITE_AUTH_URL=http://localhost:9000
+VITE_GG_CLIENT_ID=<GOOGLE_CLIENT_ID>
+VITE_GOOGLE_REDIRECT_URI=http://localhost:3000/login/oauth2/code/google
+```
+
+Chạy toàn bộ backend stack:
+
+```bash
+docker compose --env-file .env -f docker-compose.full.yml up -d --build
+```
+
+Theo dõi log khi cần:
+
+```bash
+docker compose --env-file .env -f docker-compose.full.yml logs -f apigateway authorization-server ai-model-service
+```
+
+Chạy frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev -- --host 0.0.0.0 --port 3000
+```
+
+Các URL thường dùng:
+
+| Thành phần | URL |
+| --- | --- |
+| Frontend | `http://localhost:3000` |
+| API Gateway | `http://localhost:8080` |
+| Authorization Server | `http://localhost:9000` |
+| Eureka | `http://localhost:8761` |
+| AI Model Service | `http://localhost:8005` |
+| MLflow | `http://localhost:15000` |
+| MinIO Console | `http://localhost:9001` |
+| Mailpit UI | `http://localhost:8025` |
+| Kafka UI | `http://localhost:18080` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3001` |
+
+Tắt stack:
+
+```bash
+docker compose --env-file .env -f docker-compose.full.yml down
+```
+
+Xóa cả volume dữ liệu local khi muốn reset sạch database/model registry:
+
+```bash
+docker compose --env-file .env -f docker-compose.full.yml down -v
+```
+
+Không commit `.env`, Google client secret, SMTP password, hoặc secret thật.
+Nếu cần commit cấu hình mẫu, chỉ cập nhật các file `*.env.example`.
+
 ## Chỉ Mục Dữ Liệu Huấn Luyện
 
-Nguồn dữ liệu: `data/health_insurance_portfolio.csv`, bản CSV chuyển đổi từ dữ
-liệu danh mục hợp đồng bảo hiểm sức khỏe. Dataset này được dùng cho Model 1 -
-`Portfolio Expected Cost Model`, nhằm học quan hệ giữa hồ sơ hợp đồng, lịch sử
-sử dụng/bồi thường và chi phí claim kỳ hiện tại.
+Nguồn dữ liệu gốc hiện còn trong repo là
+`data/health_insurance_portfolio.csv`. Từ nguồn này, pipeline tạo ra các dataset
+đã chuẩn hóa trong `data/generated/` để huấn luyện hai mô hình production:
 
-| Nhóm feature | Ví dụ thuộc tính | Vai trò |
+| File | Vai trò |
+| --- | --- |
+| `data/generated/frequency_training_dataset.csv` | Dataset huấn luyện Frequency Model, dự báo số claim/kỳ bảo hiểm. |
+| `data/generated/severity_training_dataset.csv` | Dataset huấn luyện Severity Model, dự báo chi phí trung bình trên mỗi claim dương. |
+| `data/generated/synthetic_insurance_claims.csv` | Master semi-synthetic dataset dùng để đánh giá kết hợp frequency-severity và làm reference dataset cho AI Model Service. |
+
+Hai model hiện tại:
+
+| Model | Script huấn luyện | Target | Thuật toán so sánh |
+| --- | --- | --- | --- |
+| Frequency Model | `ml/scripts/train_frequency_model.py` | `claim_count` | Negative Binomial GLM và XGBoost Poisson |
+| Severity Model | `ml/scripts/train_severity_model.py` | `average_claim_severity` | Gamma GLM và XGBoost Lognormal |
+
+Nhóm feature chính:
+
+| Nhóm feature | Ví dụ thuộc tính | Dùng bởi |
 | --- | --- | --- |
-| Hồ sơ khách hàng | `age`, `gender` | Yếu tố nhân khẩu học ảnh hưởng đến xác suất phát sinh chi phí y tế và mức độ sử dụng bảo hiểm. |
-| Thông tin sản phẩm/hợp đồng | `type_product`, `type_policy`, `reimbursement`, `new_business`, `distribution_channel` | Mô tả loại sản phẩm, cấu trúc hoàn trả, kênh phân phối và trạng thái hợp đồng mới/cũ; dùng để phản ánh khác biệt rủi ro theo thiết kế sản phẩm. |
-| Thời gian tham gia | `exposure_time`, `seniority_insured` | Đo mức độ phơi nhiễm rủi ro trong kỳ và độ lâu năm của người được bảo hiểm. |
-| Lịch sử claim/sử dụng dịch vụ | `prev_cost_claims_year`, `prev_n_medical_services`, `prev_had_claim_or_service`, `claim_free_previous_year` | Nhóm trọng tâm của Model 1, phản ánh kinh nghiệm bảo hiểm thực tế của khách hàng trong kỳ trước. |
-| Biến mục tiêu (target) | `claim_count`, `annual_claim_cost`, `average_claim_severity` | Dùng để huấn luyện dự báo tần suất claim và severity trung bình. |
-
-Nguồn dữ liệu: `data/health_insurance_cost_and_risk_dataset.csv`. Dataset này
-được dùng cho Model 2 - `Health Risk Modifier Model`, nhằm học quan hệ giữa hồ
-sơ sức khỏe hiện tại và chi phí y tế lịch sử.
-
-| Nhóm feature | Ví dụ thuộc tính | Vai trò |
-| --- | --- | --- |
-| Hồ sơ khách hàng | `age`, `sex`, `children` | Yếu tố nhân khẩu học và quy mô phụ thuộc ảnh hưởng đến chi phí y tế dự kiến. |
-| Chỉ số sức khỏe | `bmi`, `blood_pressure`, `pre_existing_condition` | Phản ánh tình trạng sức khỏe hiện tại, bệnh nền và các dấu hiệu có thể làm tăng rủi ro claim. |
-| Hành vi/lối sống | `smoker`, `exercise_frequency` | Mô tả thói quen có ảnh hưởng trực tiếp đến rủi ro sức khỏe và chi phí điều trị. |
-| Rủi ro nghề nghiệp | `occupation_risk` | Đại diện cho mức độ rủi ro trong môi trường làm việc, được dùng để điều chỉnh chi phí sức khỏe kỳ vọng. |
-| Biến bị loại khỏi training | `region`, `annual_income`, các cột premium/final premium nếu xuất hiện | Không dùng làm feature trong Model 2 để tránh nhiễu hoặc rò rỉ thông tin giá sau định phí. |
-| Biến mục tiêu (target) | `charges` hoặc severity tương đương | Dùng làm tín hiệu severity khi xây dựng mô hình chi phí trung bình. |
+| Hồ sơ khách hàng | `age`, `bmi`, `blood_pressure`, `smoker`, `pre_existing_condition`, `exercise_frequency`, `occupation_risk` | Frequency và Severity |
+| Thông tin sản phẩm/hợp đồng | `type_policy`, `type_policy_dg`, `type_product`, `reimbursement`, `new_business`, `distribution_channel` | Frequency và Severity |
+| Thời gian tham gia | `exposure_time`, `seniority_insured`, `seniority_policy` | Chủ yếu Frequency |
+| Lịch sử claim | `prev_claim_count`, `prev_claim_cost`, `prev_average_claim_severity`, `claim_free_years`, `prev_had_claim`, `claim_free_previous_year` | Frequency và Severity |
 
 ## Chiến Lược Định Giá
 
@@ -177,47 +278,65 @@ export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadminpassword
 ```
 
-Train Model 2:
+Train Frequency Model:
 
 ```bash
-python3 ml/scripts/train_health_risk_modifier_model.py --mlflow
+python3 ml/scripts/train_frequency_model.py --mlflow
 ```
 
-With `--mlflow`, every trained candidate model is registered as a separate
-version under the configured registry name. The candidate with the lowest
-holdout RMSE receives the model-version tag `stage=Production` and the
-registered-model alias `Production`.
-
-Train Model 1:
+Train Severity Model:
 
 ```bash
-python3 ml/scripts/convert_portfolio_excel_to_csv.py
-python3 ml/scripts/train_portfolio_expected_cost_model.py --mlflow
+python3 ml/scripts/train_severity_model.py --mlflow
 ```
 
-Generate Model 2 explanation examples:
+The unified CLI can run either model type:
 
 ```bash
-python3 ml/scripts/explain_health_risk_modifier_model.py
+python3 ml/train.py --model-type FREQUENCY --mlflow
+python3 ml/train.py --model-type SEVERITY --mlflow
 ```
 
-Open or execute the hybrid EDA notebook:
+Với `--mlflow`, training không chỉ ghi artifact local. Script sẽ log run,
+metrics, metadata, report và model artifact lên MLflow Tracking Server
+(`http://127.0.0.1:15000` khi train từ host), đồng thời đăng ký model vào
+MLflow Model Registry dưới tên:
+
+- `FrequencyModel`
+- `SeverityModel`
+
+By default, `--deployment-mode candidate` registers review candidates without
+changing production aliases. Use the admin AI model flow or explicit deployment
+steps to promote a candidate.
+
+Các file CSV trong `data/generated/` không được upload như dataset artifact mặc
+định; chúng là input/reference data để train và để AI Model Service tính baseline
+đánh giá candidate. MLflow là nơi lưu model runs, model artifacts và registry
+versions.
+
+Evaluate the combined Frequency-Severity model:
 
 ```bash
-jupyter notebook ml/notebooks/health_pricing_eda.ipynb
-jupyter nbconvert --execute ml/notebooks/health_pricing_eda.ipynb --to notebook --inplace
+python3 ml/scripts/evaluate_combined_model.py
+```
+
+Open the current notebooks:
+
+```bash
+jupyter notebook ai-model-service/notebooks/00_combined_pricing_pipeline_eda.ipynb
+jupyter notebook ai-model-service/notebooks/02_severity_training_eda.ipynb
+jupyter notebook ai-model-service/notebooks/04_frequency_severity_model_comparison.ipynb
 ```
 
 ## Outputs
 
-- Model 2 artifact: `ml/artifacts/health_risk_modifier_model.joblib`
-- Model 1 artifact: `ml/artifacts/portfolio_expected_cost_model.joblib`
-- Model 2 metadata: `ml/artifacts/health_risk_modifier_metadata.json`
-- Model 1 metadata: `ml/artifacts/portfolio_expected_cost_metadata.json`
-- Model 2 report: `ml/reports/health_risk_modifier_model_report.md`
-- Model 1 report: `ml/reports/portfolio_expected_cost_model_report.md`
-- Model comparison: `ml/reports/health_risk_modifier_comparison.csv`
-- Explanation examples: `ml/reports/health_risk_modifier_shap_examples.json`
-
-Legacy one-model scripts are kept for reference, but the hybrid flow above is
-the preferred implementation.
+- Frequency artifact: `ml/artifacts/frequency_model.joblib`
+- Frequency metadata: `ml/artifacts/frequency_metadata.json`
+- Frequency comparison: `ml/reports/frequency_comparison.csv`
+- Frequency report: `ml/reports/frequency_model_report.md`
+- Severity artifact: `ml/artifacts/severity_model.joblib`
+- Severity metadata: `ml/artifacts/severity_metadata.json`
+- Severity comparison: `ml/reports/severity_comparison.csv`
+- Severity report: `ml/reports/severity_model_report.md`
+- Combined evaluation report: `ml/reports/combined_model_report.md`
+- Combined model metadata: `ml/artifacts/combined_model_metadata.json`
