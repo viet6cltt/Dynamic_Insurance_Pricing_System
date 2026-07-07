@@ -1,0 +1,49 @@
+erDiagram
+    PREMIUM_QUOTES {
+        UUID quote_id PK
+        UUID buyer_user_id
+        UUID insured_person_id
+        UUID product_id
+        UUID coverage_plan_id
+
+        NUMERIC predicted_frequency
+        NUMERIC predicted_severity
+        NUMERIC pure_premium
+        NUMERIC loading_rate
+        VARCHAR risk_level
+        NUMERIC final_premium
+        VARCHAR frequency_model_version
+        VARCHAR severity_model_version
+
+        VARCHAR status
+
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ expired_at
+        TIMESTAMPTZ updated_at
+    }
+
+    PRICING_INPUT_SNAPSHOTS {
+        UUID snapshot_id PK
+        UUID quote_id FK
+
+        JSONB coverage_plan_snapshot
+        JSONB insured_person_snapshot
+        JSONB risk_profile_snapshot
+        JSONB claim_history_snapshot
+        JSONB ai_request_snapshot
+
+        TIMESTAMPTZ created_at
+    }
+
+    PRICING_EXPLANATIONS {
+        UUID explanation_id PK
+        UUID quote_id FK
+
+        JSONB top_risk_factors
+        JSONB shap_values
+
+        TIMESTAMPTZ generated_at
+    }
+
+    PREMIUM_QUOTES ||--|| PRICING_INPUT_SNAPSHOTS : has
+    PREMIUM_QUOTES ||--o| PRICING_EXPLANATIONS : has

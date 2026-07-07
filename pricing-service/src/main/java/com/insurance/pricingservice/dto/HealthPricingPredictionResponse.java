@@ -1,9 +1,15 @@
 package com.insurance.pricingservice.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import java.math.BigDecimal;
+
 public record HealthPricingPredictionResponse(
-    String modelVersion,
-    PortfolioModelOutput portfolioModel,
-    HealthRiskModelOutput healthRiskModel,
-    String finalPremiumCalculatedBy,
-    String finalPremiumFormula
+    BigDecimal predictedAnnualFrequency,
+    BigDecimal predictedAverageSeverity,
+    BigDecimal purePremium,
+    String riskLevel,
+    String frequencyModelVersion,
+    String severityModelVersion,
+    JsonNode frequencyExplanation,
+    JsonNode severityExplanation
 ) {}

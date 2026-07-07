@@ -68,53 +68,15 @@ class PricingExplanationPayload(BaseModel):
     generatedAt: datetime
 
 
-class PortfolioModelOutput(BaseModel):
-    status: Literal["configured", "not_configured"]
-    modelVersion: str | None = None
-    modelSource: Literal["mlflow", "local"] | None = None
-    registryModelName: str | None = None
-    registryAlias: str | None = None
-    registryVersion: str | None = None
-    predictedAnnualClaimCost: float | None = None
-    rawPortfolioRiskFactor: float | None = None
-    portfolioRiskFactor: float | None = None
-    portfolioModelExplanation: PricingExplanationPayload | None = None
-    message: str | None = None
-
-
-class HealthRiskModelOutput(BaseModel):
-    status: Literal["configured", "not_configured"]
-    modelVersion: str | None = None
-    modelSource: Literal["mlflow", "local"] | None = None
-    registryModelName: str | None = None
-    registryAlias: str | None = None
-    registryVersion: str | None = None
-    predictedHealthCost: float | None = None
-    baselineHealthCost: float | None = None
-    rawHealthRiskFactor: float | None = None
-    healthRiskFactor: float | None = None
-    riskLevel: Literal["LOW", "MODERATE", "HIGH"] | None = None
-    healthRiskExplanation: PricingExplanationPayload | None = None
-    message: str | None = None
-
-
 class HealthPricingPredictionResponse(BaseModel):
-    modelVersion: str
-    portfolioModel: PortfolioModelOutput
-    healthRiskModel: HealthRiskModelOutput
-    finalPremiumCalculatedBy: Literal["Pricing Service / Rating Engine"]
-    finalPremiumFormula: str
-    frequencyModelVersion: str | None = None
-    severityModelVersion: str | None = None
-    frequencyPrediction: float | None = None
-    predictedFrequencyAnnual: float | None = None
-    predictedSeverity: float | None = None
-    predictedPurePremium: float | None = None
-    baselinePurePremium: float | None = None
-    rawRiskFactor: float | None = None
-    appliedRiskFactor: float | None = None
-    riskFactors: list[dict] = []
-    explanationStatus: Literal["available", "partial", "unavailable"] | None = None
+    predictedAnnualFrequency: float
+    predictedAverageSeverity: float
+    purePremium: float
+    riskLevel: Literal["LOW", "MEDIUM", "HIGH"]
+    frequencyModelVersion: str
+    severityModelVersion: str
+    frequencyExplanation: dict
+    severityExplanation: dict
 
 
 class ModelComponentMetadata(BaseModel):
@@ -166,18 +128,14 @@ class PurePremiumPredictionRequest(BaseModel):
 
 
 class PurePremiumPredictionResponse(BaseModel):
-    modelVersion: str
-    frequencyModelVersion: str | None = None
-    severityModelVersion: str | None = None
-    frequencyPrediction: float
-    predictedFrequencyAnnual: float
-    predictedSeverity: float
-    predictedPurePremium: float
-    baselinePurePremium: float
-    rawRiskFactor: float
-    appliedRiskFactor: float
-    riskFactors: list[dict]
-    explanationStatus: Literal["available", "partial", "unavailable"]
+    predictedAnnualFrequency: float
+    predictedAverageSeverity: float
+    purePremium: float
+    riskLevel: Literal["LOW", "MEDIUM", "HIGH"]
+    frequencyModelVersion: str
+    severityModelVersion: str
+    frequencyExplanation: dict
+    severityExplanation: dict
 
 
 class TrainingJobCreateRequest(BaseModel):

@@ -76,7 +76,8 @@ public class ContractService {
                 .typePolicy("STANDARD") // Default policy segment
                 .reimbursement("FULL") // Default reimbursement type
                 .distributionChannel("DIRECT") // Default channel
-                .basePremium(validateResponse.basePremium())
+                .purePremium(validateResponse.purePremium())
+                .loadingRate(validateResponse.loadingRate())
                 .quotedPremium(validateResponse.finalPremium())
                 .sumInsured(BigDecimal.valueOf(100000000)) // Default sum insured fallback
                 .status(ContractStatus.PAYMENT_PENDING)
@@ -99,7 +100,8 @@ public class ContractService {
             QuoteResponse quoteDetails = pricingServiceClient.markQuoteUsed(request.quoteId());
             if (quoteDetails != null) {
                 savedContract.setProductType(quoteDetails.productType());
-                savedContract.setBasePremium(quoteDetails.basePremium());
+                savedContract.setPurePremium(quoteDetails.purePremium());
+                savedContract.setLoadingRate(quoteDetails.loadingRate());
                 savedContract.setQuotedPremium(quoteDetails.finalPremium());
                 savedContract.setSumInsured(quoteDetails.sumInsured());
             }
@@ -301,7 +303,8 @@ public class ContractService {
                 c.getReimbursement(),
                 c.getDistributionChannel(),
                 c.getQuotedPremium(),
-                c.getBasePremium(),
+                c.getPurePremium(),
+                c.getLoadingRate(),
                 c.getSumInsured(),
                 c.getEffectiveDate(),
                 c.getExpiryDate(),

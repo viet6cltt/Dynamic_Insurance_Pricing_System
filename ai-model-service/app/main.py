@@ -17,7 +17,6 @@ from .lifecycle import (
     reject_candidate,
     user_id,
 )
-from .model_runtime import HealthPricingRuntime
 from .pure_premium_runtime import PurePremiumRuntime
 from .schemas import (
     HealthPricingPredictionRequest,
@@ -36,11 +35,6 @@ app = FastAPI(title="AI Model Service", version="1.0.0")
 @app.on_event("startup")
 def startup() -> None:
     init_db()
-
-
-@lru_cache
-def runtime() -> HealthPricingRuntime:
-    return HealthPricingRuntime()
 
 
 @lru_cache
@@ -65,18 +59,31 @@ def health() -> dict[str, str]:
 
 @app.get("/health/pricing/metadata", response_model=ModelMetadataResponse)
 def model_metadata() -> dict[str, object]:
-    return runtime().metadata_response()
+    return {
+        "serviceVersion": "hybrid-health-pricing-v1",
+        "portfolioModel": {
+            "status": "not_configured",
+            "featureList": [],
+            "purpose": "Portfolio Expected Cost Model (disabled)",
+        },
+        "healthRiskModel": {
+            "status": "not_configured",
+            "featureList": [],
+            "purpose": "Health risk modifier (disabled)",
+        },
+        "noFinalPremiumInModel": True,
+        "finalPremiumFormula": (
+            "purePremium * (1 + loadingRate)"
+        ),
+    }
 
 
 @app.post("/health/pricing/predict", response_model=HealthPricingPredictionResponse)
 def predict_health_pricing(request: HealthPricingPredictionRequest) -> dict[str, object]:
-    response = runtime().predict(request)
     try:
-        response.update(pure_runtime().predict(request))
+        return pure_runtime().predict(request)
     except Exception as exc:
-        response.update({"riskFactors": [], "explanationStatus": "unavailable"})
-        response.setdefault("portfolioModel", {}).setdefault("message", str(exc))
-    return response
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/pure-premium/predict", response_model=PurePremiumPredictionResponse)

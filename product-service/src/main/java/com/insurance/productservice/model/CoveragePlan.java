@@ -33,11 +33,11 @@ public class CoveragePlan {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "base_premium", nullable = false, precision = 15, scale = 2)
-    private BigDecimal basePremium;
-
     @Column(name = "sum_insured", nullable = false, precision = 15, scale = 2)
     private BigDecimal sumInsured;
+
+    @Column(name = "loading_rate", nullable = false, precision = 5, scale = 4)
+    private BigDecimal loadingRate;
 
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default

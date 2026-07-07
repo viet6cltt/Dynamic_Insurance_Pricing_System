@@ -4,6 +4,7 @@ import { useAuthStore } from "../../store/authStore";
 import { adminService } from "../../services/adminService";
 import RiskSchemaTab from "./RiskSchemaTab";
 import OccupationMappingTab from "./OccupationMappingTab";
+import AIModelsTab from "./AIModelsTab";
 import Pagination from "../../components/Pagination";
 import {
   LayoutDashboard,
@@ -21,7 +22,8 @@ import {
   FileCode2,
   Briefcase,
   Mail,
-  RotateCcw
+  RotateCcw,
+  BrainCircuit
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -37,6 +39,7 @@ export default function AdminDashboard() {
       case "/admin/risk-schemas": return "risk-schemas";
       case "/admin/occupation-mappings": return "occupation-mappings";
       case "/admin/notifications": return "notifications";
+      case "/admin/ai-models": return "ai-models";
       default: return "overview";
     }
   };
@@ -52,6 +55,8 @@ export default function AdminDashboard() {
       navigate("/admin/coverage-plans");
     } else if (tabName === "notifications") {
       navigate("/admin/notifications");
+    } else if (tabName === "ai-models") {
+      navigate("/admin/ai-models");
     } else {
       setProductPage(1);
       navigate(`/admin/${tabName}`);
@@ -64,6 +69,7 @@ export default function AdminDashboard() {
     { id: "plans",                label: "Các gói bảo hiểm",         icon: Layers },
     { id: "risk-schemas",         label: "Risk Input Schema",         icon: FileCode2 },
     { id: "occupation-mappings",  label: "Occupation Risk Mapping",   icon: Briefcase },
+    { id: "ai-models",            label: "AI Models",                 icon: BrainCircuit },
     { id: "notifications",        label: "Email thông báo",           icon: Mail },
   ];
 
@@ -121,7 +127,7 @@ export default function AdminDashboard() {
   const [planForm, setPlanForm] = useState({
     planName: "",
     description: "",
-    basePremium: "",
+    loadingRate: "",
     sumInsured: "",
     status: "ACTIVE"
   });
@@ -302,7 +308,7 @@ export default function AdminDashboard() {
     setPlanForm({
       planName: "",
       description: "",
-      basePremium: "",
+      loadingRate: "",
       sumInsured: "",
       status: "ACTIVE"
     });
@@ -317,7 +323,7 @@ export default function AdminDashboard() {
       setPlanForm({
         planName: detail.planName || "",
         description: detail.description || "",
-        basePremium: detail.basePremium?.toString() || "",
+        loadingRate: detail.loadingRate != null ? String(Number(detail.loadingRate) * 100) : "",
         sumInsured: detail.sumInsured?.toString() || "",
         status: detail.status || "ACTIVE"
       });
@@ -338,7 +344,7 @@ export default function AdminDashboard() {
       const payload = {
         planName: planForm.planName,
         description: planForm.description,
-        basePremium: Number(planForm.basePremium),
+        loadingRate: Number(planForm.loadingRate) / 100,
         sumInsured: Number(planForm.sumInsured),
         status: planForm.status
       };
@@ -792,7 +798,7 @@ export default function AdminDashboard() {
                         <tr className="border-b border-gray-100 text-gray-400 font-semibold text-xs uppercase bg-gray-50/50">
                           <th className="py-4 px-6">Tên gói bảo hiểm</th>
                           <th className="py-4 px-6">Mô tả quyền lợi</th>
-                          <th className="py-4 px-6">Phí đóng cơ bản</th>
+                          <th className="py-4 px-6">Loading Rate</th>
                           <th className="py-4 px-6">Số tiền bảo hiểm</th>
                           <th className="py-4 px-6">Trạng thái</th>
                           <th className="py-4 px-6 text-right">Thao tác</th>
@@ -804,7 +810,7 @@ export default function AdminDashboard() {
                             <td className="py-4 px-6 font-bold text-gray-900">{pl.planName}</td>
                             <td className="py-4 px-6 text-xs text-gray-500 max-w-xs">{pl.description || "Không có mô tả."}</td>
                             <td className="py-4 px-6 font-bold text-blue-600">
-                              {(pl.basePremium || 0).toLocaleString("vi-VN")}đ
+                              {((pl.loadingRate || 0) * 100).toLocaleString("vi-VN")}% 
                             </td>
                             <td className="py-4 px-6 font-bold text-gray-900">
                               {(pl.sumInsured || 0).toLocaleString("vi-VN")}đ
@@ -997,6 +1003,13 @@ export default function AdminDashboard() {
             <OccupationMappingTab products={products} triggerToast={triggerToast} />
           )}
 
+          {/* ================================================================ */}
+          {/* TAB 7: AI MODEL LIFECYCLE */}
+          {/* ================================================================ */}
+          {activeTab === "ai-models" && (
+            <AIModelsTab triggerToast={triggerToast} />
+          )}
+
         </main>
       </div>
 
@@ -1184,15 +1197,18 @@ export default function AdminDashboard() {
                 ></textarea>
               </div>
 
-              {/* Base Premium */}
+              {/* Loading Rate */}
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Phí đóng cơ bản (VND)</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Loading Rate (%)</label>
                 <input
                   type="number"
                   required
-                  placeholder="Ví dụ: 1000000"
-                  value={planForm.basePremium}
-                  onChange={(e) => setPlanForm({ ...planForm, basePremium: e.target.value })}
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="Ví dụ: 20"
+                  value={planForm.loadingRate}
+                  onChange={(e) => setPlanForm({ ...planForm, loadingRate: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-255 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

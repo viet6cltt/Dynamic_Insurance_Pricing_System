@@ -62,6 +62,10 @@ export const adminService = {
     return axiosClient.patch(`/admin/coverage-plans/${planId}/status`, { status });
   },
 
+  updateCoveragePlanLoadingRate: async (planId, loadingRate) => {
+    return axiosClient.patch(`/admin/coverage-plans/${planId}/loading-rate`, { loadingRate });
+  },
+
   // --- Risk Input Schema Management ---
   getRiskInputSchema: async (productId) => {
     try {
@@ -123,5 +127,36 @@ export const adminService = {
 
   retryEmailDelivery: async (deliveryId) => {
     return axiosClient.post(`/notifications/admin/email-deliveries/${deliveryId}/retry`);
+  },
+
+  // --- AI Model Lifecycle Management ---
+  createTrainingJob: async (modelType) => {
+    return axiosClient.post("/api/admin/training-jobs", { modelType });
+  },
+
+  getTrainingJob: async (jobId) => {
+    return axiosClient.get(`/api/admin/training-jobs/${jobId}`);
+  },
+
+  getAiModel: async (modelType) => {
+    return axiosClient.get(`/api/admin/models/${modelType}`);
+  },
+
+  getAiModelComparison: async (modelType) => {
+    return axiosClient.get(`/api/admin/models/${modelType}/comparison`);
+  },
+
+  promoteAiModel: async (modelType, candidateVersion, reason) => {
+    return axiosClient.post(`/api/admin/models/${modelType}/promote`, {
+      candidateVersion,
+      reason,
+    });
+  },
+
+  rejectAiModel: async (modelType, candidateVersion, reason) => {
+    return axiosClient.post(`/api/admin/models/${modelType}/reject`, {
+      candidateVersion,
+      reason,
+    });
   },
 };

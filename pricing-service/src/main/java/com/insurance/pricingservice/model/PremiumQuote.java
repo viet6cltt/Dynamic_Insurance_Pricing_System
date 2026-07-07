@@ -41,40 +41,20 @@ public class PremiumQuote {
     @Column(name = "plan_name", nullable = false)
     private String planName;
 
-    @Column(name = "base_premium", nullable = false, precision = 15, scale = 2)
-    private BigDecimal basePremium;
-
     @Column(name = "sum_insured", nullable = false, precision = 15, scale = 2)
     private BigDecimal sumInsured;
 
-    @Column(name = "predicted_annual_claim_cost", precision = 15, scale = 2)
-    private BigDecimal predictedAnnualClaimCost;
+    @Column(name = "predicted_frequency", nullable = false, precision = 15, scale = 6)
+    private BigDecimal predictedFrequency;
 
-    @Column(name = "predicted_health_cost", precision = 15, scale = 2)
-    private BigDecimal predictedHealthCost;
+    @Column(name = "predicted_severity", nullable = false, precision = 15, scale = 2)
+    private BigDecimal predictedSeverity;
 
-    @Column(name = "baseline_health_cost", precision = 15, scale = 2)
-    private BigDecimal baselineHealthCost;
+    @Column(name = "pure_premium", nullable = false, precision = 15, scale = 2)
+    private BigDecimal purePremium;
 
-    @Column(name = "raw_portfolio_risk_factor", precision = 10, scale = 4)
-    private BigDecimal rawPortfolioRiskFactor;
-
-    @Column(name = "portfolio_risk_factor", precision = 10, scale = 4)
-    private BigDecimal portfolioRiskFactor;
-
-    @Column(name = "raw_health_risk_factor", precision = 10, scale = 4)
-    private BigDecimal rawHealthRiskFactor;
-
-    @Column(name = "health_risk_factor", precision = 10, scale = 4)
-    private BigDecimal healthRiskFactor;
-
-    @Column(name = "underwriting_adjustment_factor", nullable = false, precision = 10, scale = 4)
-    @Builder.Default
-    private BigDecimal underwritingAdjustmentFactor = BigDecimal.ONE;
-
-    @Column(name = "business_adjustment_factor", nullable = false, precision = 10, scale = 4)
-    @Builder.Default
-    private BigDecimal businessAdjustmentFactor = BigDecimal.ONE;
+    @Column(name = "loading_rate", nullable = false, precision = 5, scale = 4)
+    private BigDecimal loadingRate;
 
     @Column(name = "final_premium", nullable = false, precision = 15, scale = 2)
     private BigDecimal finalPremium;
@@ -82,14 +62,11 @@ public class PremiumQuote {
     @Column(name = "risk_level", length = 50)
     private String riskLevel;
 
-    @Column(name = "portfolio_model_version")
-    private String portfolioModelVersion;
+    @Column(name = "frequency_model_version")
+    private String frequencyModelVersion;
 
-    @Column(name = "health_model_version")
-    private String healthModelVersion;
-
-    @Column(name = "pricing_rule_version")
-    private String pricingRuleVersion;
+    @Column(name = "severity_model_version")
+    private String severityModelVersion;
 
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default

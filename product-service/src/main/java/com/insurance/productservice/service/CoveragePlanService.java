@@ -5,6 +5,7 @@ import com.insurance.productservice.dto.CreateCoveragePlanRequest;
 import com.insurance.productservice.dto.CoveragePlanResponse;
 import com.insurance.productservice.dto.InternalCoveragePlanResponse;
 import com.insurance.productservice.dto.ListResponse;
+import com.insurance.productservice.dto.UpdateLoadingRateRequest;
 import com.insurance.productservice.dto.UpdateCoveragePlanRequest;
 import com.insurance.productservice.model.CoveragePlan;
 import com.insurance.productservice.model.InsuranceProduct;
@@ -17,6 +18,7 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -63,19 +65,17 @@ public class CoveragePlanService {
         if (request.planName() == null || request.planName().isBlank()) {
             throw new IllegalArgumentException("Plan name cannot be null or empty");
         }
-        if (request.basePremium() == null) {
-            throw new IllegalArgumentException("Base premium cannot be null");
-        }
         if (request.sumInsured() == null) {
             throw new IllegalArgumentException("Sum insured cannot be null");
         }
+        validateLoadingRate(request.loadingRate());
 
         CoveragePlan plan = CoveragePlan.builder()
                 .product(product)
                 .planName(request.planName())
                 .description(request.description())
-                .basePremium(request.basePremium())
                 .sumInsured(request.sumInsured())
+                .loadingRate(request.loadingRate())
                 .status(request.status() != null ? request.status().toUpperCase() : "ACTIVE")
                 .build();
 
@@ -97,11 +97,12 @@ public class CoveragePlanService {
         if (request.description() != null) {
             plan.setDescription(request.description());
         }
-        if (request.basePremium() != null) {
-            plan.setBasePremium(request.basePremium());
-        }
         if (request.sumInsured() != null) {
             plan.setSumInsured(request.sumInsured());
+        }
+        if (request.loadingRate() != null) {
+            validateLoadingRate(request.loadingRate());
+            plan.setLoadingRate(request.loadingRate());
         }
         if (request.status() != null && !request.status().isBlank()) {
             plan.setStatus(request.status().toUpperCase());
@@ -127,6 +128,36 @@ public class CoveragePlanService {
         return mapToResponse(planRepository.save(plan));
     }
 
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.COVERAGE_PLAN_CACHE, key = "'public:' + #coveragePlanId"),
+            @CacheEvict(value = CacheConfig.COVERAGE_PLAN_CACHE, key = "'internal:' + #coveragePlanId")
+    })
+    public CoveragePlanResponse updateLoadingRate(UUID coveragePlanId, UpdateLoadingRateRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Loading rate request cannot be null");
+        }
+        validateLoadingRate(request.loadingRate());
+
+        CoveragePlan plan = planRepository.findById(coveragePlanId)
+                .orElseThrow(() -> new IllegalArgumentException("Coverage plan not found with ID: " + coveragePlanId));
+
+        plan.setLoadingRate(request.loadingRate());
+        return mapToResponse(planRepository.save(plan));
+    }
+
+    private void validateLoadingRate(BigDecimal loadingRate) {
+        if (loadingRate == null) {
+            throw new IllegalArgumentException("Loading rate cannot be null");
+        }
+        if (loadingRate.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Loading rate cannot be negative");
+        }
+        if (loadingRate.compareTo(BigDecimal.ONE) > 0) {
+            throw new IllegalArgumentException("Loading rate cannot exceed 1.00");
+        }
+    }
+
     private CoveragePlanResponse mapToResponse(CoveragePlan plan) {
         return new CoveragePlanResponse(
                 plan.getCoveragePlanId(),
@@ -134,8 +165,8 @@ public class CoveragePlanService {
                 plan.getProduct().getProductType(),
                 plan.getPlanName(),
                 plan.getDescription(),
-                plan.getBasePremium(),
                 plan.getSumInsured(),
+                plan.getLoadingRate(),
                 plan.getStatus(),
                 plan.getCreatedAt(),
                 plan.getUpdatedAt()
@@ -148,8 +179,8 @@ public class CoveragePlanService {
                 plan.getProduct().getProductId(),
                 plan.getProduct().getProductType(),
                 plan.getPlanName(),
-                plan.getBasePremium(),
                 plan.getSumInsured(),
+                plan.getLoadingRate(),
                 plan.getStatus()
         );
     }

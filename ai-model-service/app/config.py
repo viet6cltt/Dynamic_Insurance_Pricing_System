@@ -28,10 +28,3 @@ def reference_dataset_path() -> Path:
 def dataset_version() -> str:
     return os.getenv("DATASET_VERSION", "generated-current")
 
-
-def risk_factor_min() -> float:
-    return float(os.getenv("PURE_PREMIUM_RISK_FACTOR_MIN", "0.5"))
-
-
-def risk_factor_max() -> float:
-    return float(os.getenv("PURE_PREMIUM_RISK_FACTOR_MAX", "3.0"))

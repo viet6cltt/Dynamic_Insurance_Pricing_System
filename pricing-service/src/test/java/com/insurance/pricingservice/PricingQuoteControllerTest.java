@@ -115,24 +115,25 @@ public class PricingQuoteControllerTest {
         // 2. Mock Product Service
         InternalCoveragePlanResponse coveragePlan = new InternalCoveragePlanResponse(
                 coveragePlanId, productId, "HEALTH", "Standard Gold Plan",
-                new BigDecimal("2500000.00"), new BigDecimal("150000000.00"), "ACTIVE"
+                new BigDecimal("150000000.00"), new BigDecimal("0.2000"), "ACTIVE"
         );
         Mockito.when(productServiceClient.getInternalCoveragePlan(coveragePlanId))
                 .thenReturn(coveragePlan);
 
         // 3. Mock AI Model Service
-        PortfolioModelOutput portfolioOutput = new PortfolioModelOutput(
-                "configured", "portfolio-xgb-v1", "local", "portfolio_model", "latest", "1",
-                new BigDecimal("3100000.00"), new BigDecimal("1.18"), new BigDecimal("1.15"),
-                null, "Success"
-        );
-        HealthRiskModelOutput healthOutput = new HealthRiskModelOutput(
-                "configured", "health-xgb-v1", "local", "health_model", "latest", "1",
-                new BigDecimal("5000000.00"), new BigDecimal("3200000.00"), new BigDecimal("1.72"), new BigDecimal("1.42"),
-                "HIGH", null, "Success"
-        );
+        ObjectNode frequencyExplanation = objectMapper.createObjectNode();
+        frequencyExplanation.set("topFactors", objectMapper.createArrayNode());
+        ObjectNode severityExplanation = objectMapper.createObjectNode();
+        severityExplanation.set("topFactors", objectMapper.createArrayNode());
         HealthPricingPredictionResponse predictionResponse = new HealthPricingPredictionResponse(
-                "v1.0", portfolioOutput, healthOutput, "Pricing Service / Rating Engine", "basePremium * portfolioRiskFactor * healthRiskFactor"
+                new BigDecimal("10.000000"),
+                new BigDecimal("500000.00"),
+                new BigDecimal("5000000.00"),
+                "HIGH",
+                "frequency-v4",
+                "severity-v1",
+                frequencyExplanation,
+                severityExplanation
         );
         Mockito.when(aiModelServiceClient.predictHealthPricing(any(HealthPricingPredictionRequest.class)))
                 .thenReturn(predictionResponse);
@@ -169,15 +170,19 @@ public class PricingQuoteControllerTest {
 
         PremiumQuote savedQuote = quoteRepository.findAll().getFirst();
         assertEquals("GENERATED", savedQuote.getStatus());
+        assertEquals(new BigDecimal("5000000.00"), savedQuote.getPurePremium());
+        assertEquals(new BigDecimal("6000000.00"), savedQuote.getFinalPremium());
+        assertEquals(new BigDecimal("0.2000"), savedQuote.getLoadingRate());
+        assertEquals(0.2, snapshotRepository.findAll().getFirst()
+                .getCoveragePlanSnapshot()
+                .get("loadingRate")
+                .asDouble());
 
         var predictionCaptor = org.mockito.ArgumentCaptor.forClass(HealthPricingPredictionRequest.class);
-        Mockito.verify(aiModelServiceClient, Mockito.times(2)).predictHealthPricing(predictionCaptor.capture());
+        Mockito.verify(aiModelServiceClient, Mockito.times(1)).predictHealthPricing(predictionCaptor.capture());
         HealthPricingPredictionRequest actualRequest = predictionCaptor.getAllValues().getFirst();
-        HealthPricingPredictionRequest neutralRequest = predictionCaptor.getAllValues().get(1);
         assertEquals(1000.0, actualRequest.portfolioProfile().prevCostClaimsYear());
         assertEquals(2000.0, actualRequest.historicalExperienceFeatures().totalPastClaimAmount());
-        assertEquals(222.2, neutralRequest.portfolioProfile().prevCostClaimsYear());
-        assertEquals(7.0, neutralRequest.portfolioProfile().prevNMedicalServices());
     }
 
     @Test
@@ -210,22 +215,15 @@ public class PricingQuoteControllerTest {
                 .coveragePlanId(UUID.randomUUID())
                 .productType("HEALTH")
                 .planName("Standard Gold Plan")
-                .basePremium(new BigDecimal("2500000.00"))
                 .sumInsured(new BigDecimal("150000000.00"))
-                .predictedAnnualClaimCost(BigDecimal.ZERO)
-                .predictedHealthCost(BigDecimal.ZERO)
-                .baselineHealthCost(BigDecimal.ZERO)
-                .rawPortfolioRiskFactor(BigDecimal.ONE)
-                .portfolioRiskFactor(BigDecimal.ONE)
-                .rawHealthRiskFactor(BigDecimal.ONE)
-                .healthRiskFactor(BigDecimal.ONE)
-                .underwritingAdjustmentFactor(BigDecimal.ONE)
-                .businessAdjustmentFactor(BigDecimal.ONE)
+                .predictedFrequency(new BigDecimal("0.000000"))
+                .predictedSeverity(new BigDecimal("0.00"))
+                .purePremium(new BigDecimal("2500000.00"))
+                .loadingRate(new BigDecimal("0.0000"))
                 .finalPremium(new BigDecimal("2500000.00"))
-                .riskLevel("STANDARD")
-                .portfolioModelVersion("test")
-                .healthModelVersion("test")
-                .pricingRuleVersion("v1.0")
+                .riskLevel("MEDIUM")
+                .frequencyModelVersion("test-frequency")
+                .severityModelVersion("test-severity")
                 .status(status)
                 .expiredAt(expiredAt)
                 .build();

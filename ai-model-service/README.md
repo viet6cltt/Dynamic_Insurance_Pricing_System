@@ -1,25 +1,22 @@
 # AI Model Service
 
-This service returns hybrid Health Insurance AI signals for Pricing Service.
+This service returns Frequency and Severity AI signals for Pricing Service.
 
 Responsibilities:
 
-- Load Model 1 from `ml/artifacts/portfolio_expected_cost_model.joblib` when
-  available and return `predictedAnnualClaimCost` plus `portfolioRiskFactor`.
-- Load Model 2 from `ml/artifacts/health_risk_modifier_model.joblib`.
-- Predict `predictedHealthCost` from health profile fields.
-- Predict `baselineHealthCost` for the same age/sex/children/region with
-  `bmi=22` and `smoker=no`.
-- Return the clamped `healthRiskFactor`.
+- Load Frequency model to predict annual claim frequency.
+- Load Severity model to predict per-claim severity.
+- Calculate Pure Premium as `predictedAnnualFrequency * predictedAverageSeverity`.
+- Return pure premium predictions, risk level, model versions, and frequency/severity explanations.
 
 Guardrails:
 
-- The service does not receive or use `basePremium`.
+- The service does not receive or use Coverage Plan `loadingRate`.
 - The service does not calculate `finalPremium`.
 - Pricing Service / Rating Engine applies:
 
 ```text
-finalPremium = basePremium * portfolioRiskFactor * healthRiskFactor * underwritingRules * businessRules
+finalPremium = purePremium * (1 + loadingRate)
 ```
 
 ## Contract
@@ -32,9 +29,8 @@ Run from the repository root:
 
 ```bash
 python3 -m pip install -r ai-model-service/requirements.txt
-python3 ml/scripts/train_portfolio_expected_cost_model.py
-python3 ml/scripts/train_health_risk_modifier_model.py
-python3 ml/scripts/explain_health_risk_modifier_model.py
+python3 ml/train.py --model-type FREQUENCY
+python3 ml/train.py --model-type SEVERITY
 ```
 
 ## Run Service

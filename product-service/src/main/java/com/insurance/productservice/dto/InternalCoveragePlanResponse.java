@@ -8,7 +8,7 @@ public record InternalCoveragePlanResponse(
     UUID productId,
     String productType,
     String planName,
-    BigDecimal basePremium,
     BigDecimal sumInsured,
+    BigDecimal loadingRate,
     String status
 ) {}

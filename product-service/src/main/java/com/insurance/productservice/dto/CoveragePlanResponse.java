@@ -10,8 +10,8 @@ public record CoveragePlanResponse(
     String productType,
     String planName,
     String description,
-    BigDecimal basePremium,
     BigDecimal sumInsured,
+    BigDecimal loadingRate,
     String status,
     Instant createdAt,
     Instant updatedAt

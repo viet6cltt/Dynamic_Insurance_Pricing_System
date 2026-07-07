@@ -11,7 +11,8 @@ public record ValidateQuoteResponse(
     UUID insuredPersonId,
     UUID productId,
     UUID coveragePlanId,
-    BigDecimal basePremium,
+    BigDecimal purePremium,
+    BigDecimal loadingRate,
     BigDecimal finalPremium,
     String status,
     Instant expiredAt

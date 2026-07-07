@@ -2,7 +2,9 @@ openapi: 3.0.3
 info:
   title: AI Model Service
   version: 1.0.0
-  description: Predicts Health Insurance expected risk cost for Pricing Service.
+  description: >
+    Returns Frequency-Severity predictions for Health Insurance pricing.
+    Pricing Service recalculates purePremium and finalPremium.
 paths:
   /health:
     get:
@@ -22,10 +24,12 @@ paths:
                 $ref: "#/components/schemas/ModelMetadataResponse"
   /health/pricing/predict:
     post:
-      summary: Predict expected risk cost for Health Insurance
+      summary: Predict annual claim frequency and average severity
       description: >
-        AI Model Service predicts expectedRiskCost only. It must not receive
-        basePremium and must not calculate finalPremium.
+        The AI Model Service does not receive loadingRate and does not calculate
+        finalPremium. It returns predictedAnnualFrequency, predictedAverageSeverity
+        and purePremium. Pricing Service verifies purePremium and applies
+        finalPremium = purePremium * (1 + loadingRate).
       requestBody:
         required: true
         content:
@@ -34,7 +38,7 @@ paths:
               $ref: "#/components/schemas/HealthPricingPredictionRequest"
       responses:
         "200":
-          description: Expected risk cost prediction and explanation payload
+          description: Frequency-Severity prediction payload
           content:
             application/json:
               schema:
@@ -43,17 +47,7 @@ components:
   schemas:
     HealthRiskProfile:
       type: object
-      required:
-        - age
-        - sex
-        - bmi
-        - smoker
-        - region
-        - bloodPressure
-        - exerciseFrequency
-        - preExistingCondition
-        - occupationRisk
-        - annualIncome
+      required: [age, sex, bmi, children, smoker, bloodPressure, exerciseFrequency, preExistingCondition, occupationRisk]
       properties:
         age:
           type: number
@@ -69,12 +63,10 @@ components:
         children:
           type: integer
           minimum: 0
-          default: 0
+          maximum: 20
         smoker:
           type: string
           enum: [yes, no]
-        region:
-          type: string
         bloodPressure:
           type: number
           minimum: 70
@@ -86,122 +78,141 @@ components:
         occupationRisk:
           type: string
           enum: [low, moderate, high]
-        annualIncome:
+    PortfolioPricingProfile:
+      type: object
+      properties:
+        gender:
+          type: string
+          nullable: true
+        typeProduct:
+          type: string
+          nullable: true
+        typePolicy:
+          type: string
+          nullable: true
+        reimbursement:
+          type: string
+          nullable: true
+        exposureTime:
           type: number
+          nullable: true
           minimum: 0
+        seniorityInsured:
+          type: number
+          nullable: true
+          minimum: 0
+        newBusiness:
+          type: string
+          nullable: true
+        distributionChannel:
+          type: string
+          nullable: true
+        prevCostClaimsYear:
+          type: number
+          nullable: true
+          minimum: 0
+        prevNMedicalServices:
+          type: number
+          nullable: true
+          minimum: 0
+        prevHadClaimOrService:
+          type: boolean
+          nullable: true
+        claimFreePreviousYear:
+          type: boolean
+          nullable: true
     HistoricalExperienceFeatures:
       type: object
-      required:
-        - pastClaimCount
-        - totalPastClaimAmount
       properties:
         pastClaimCount:
           type: integer
+          nullable: true
           minimum: 0
-          description: Synthetic MVP/demo feature or future feature-store value.
         totalPastClaimAmount:
           type: number
+          nullable: true
           minimum: 0
-          description: Synthetic MVP/demo feature or future feature-store value.
+        claimFreeYears:
+          type: integer
+          nullable: true
+          minimum: 0
+        recencyWeightedClaimScore:
+          type: number
+          nullable: true
+          minimum: 0
     HealthPricingPredictionRequest:
       type: object
-      required:
-        - productType
-        - riskProfile
-        - historicalExperienceFeatures
+      required: [productType, riskProfile]
       properties:
         productType:
           type: string
           enum: [HEALTH]
         riskProfile:
           $ref: "#/components/schemas/HealthRiskProfile"
+        portfolioProfile:
+          nullable: true
+          $ref: "#/components/schemas/PortfolioPricingProfile"
         historicalExperienceFeatures:
+          nullable: true
           $ref: "#/components/schemas/HistoricalExperienceFeatures"
-    ExplanationItem:
+    ExplanationPayload:
       type: object
       properties:
-        feature:
-          type: string
-        sourceFeature:
-          type: string
-        value:
-          type: number
-        impact:
-          type: number
-        direction:
-          type: string
-          enum: [increase, decrease, neutral]
-        reason:
-          type: string
-        approximate:
-          type: boolean
-    PricingExplanationPayload:
-      type: object
-      required:
-        - topRiskFactors
-        - shapValues
-        - method
-        - generatedAt
-      properties:
-        topRiskFactors:
+        topFactors:
           type: array
           items:
-            $ref: "#/components/schemas/ExplanationItem"
+            type: object
         shapValues:
-          type: array
-          items:
-            $ref: "#/components/schemas/ExplanationItem"
+          type: object
+          nullable: true
         method:
           type: string
-          description: SHAP when available, otherwise fallback explanation method.
-        generatedAt:
+          nullable: true
+        status:
           type: string
-          format: date-time
+          nullable: true
     HealthPricingPredictionResponse:
       type: object
       required:
-        - modelVersion
-        - expectedRiskCost
-        - averageExpectedRiskCost
-        - rawRiskFactor
-        - riskFactor
+        - predictedAnnualFrequency
+        - predictedAverageSeverity
+        - purePremium
         - riskLevel
-        - explanation
+        - frequencyModelVersion
+        - severityModelVersion
+        - frequencyExplanation
+        - severityExplanation
       properties:
-        modelVersion:
-          type: string
-        expectedRiskCost:
+        predictedAnnualFrequency:
           type: number
-          description: AI-predicted expected risk cost, not final premium.
-        averageExpectedRiskCost:
+          example: 10.5
+        predictedAverageSeverity:
           type: number
-        rawRiskFactor:
+          example: 450000
+        purePremium:
           type: number
-        riskFactor:
-          type: number
-          minimum: 0.7
-          maximum: 2.5
+          example: 4725000
         riskLevel:
           type: string
-          enum: [LOW, MODERATE, HIGH]
-        explanation:
-          $ref: "#/components/schemas/PricingExplanationPayload"
+          enum: [LOW, MEDIUM, HIGH]
+        frequencyModelVersion:
+          type: string
+          example: frequency-v4
+        severityModelVersion:
+          type: string
+          example: severity-v1
+        frequencyExplanation:
+          $ref: "#/components/schemas/ExplanationPayload"
+        severityExplanation:
+          $ref: "#/components/schemas/ExplanationPayload"
     ModelMetadataResponse:
       type: object
-      required:
-        - modelVersion
-        - featureList
-        - noBasePremiumInModel
+      required: [serviceVersion, noFinalPremiumInModel, finalPremiumFormula]
       properties:
-        modelVersion:
+        serviceVersion:
           type: string
-        selectedModel:
-          type: string
-        trainingDate:
-          type: string
-        featureList:
-          type: array
-          items:
-            type: string
-        noBasePremiumInModel:
+        noFinalPremiumInModel:
           type: boolean
+        finalPremiumFormula:
+          type: string
+          example: purePremium * (1 + loadingRate)

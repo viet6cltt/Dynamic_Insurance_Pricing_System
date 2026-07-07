@@ -8,35 +8,40 @@ import java.math.RoundingMode;
 @Service
 public class RatingEngine {
 
-    public BigDecimal calculateFinalPremium(
-            BigDecimal basePremium,
-            BigDecimal portfolioRiskFactor,
-            BigDecimal healthRiskFactor,
-            BigDecimal underwritingAdjustmentFactor,
-            BigDecimal businessAdjustmentFactor) {
+    public static final int MONEY_SCALE = 2;
+    public static final int FREQUENCY_SCALE = 6;
+    public static final int RATE_SCALE = 4;
+    public static final RoundingMode ROUNDING_MODE = RoundingMode.HALF_UP;
 
-        if (basePremium == null) {
-            throw new IllegalArgumentException("Base premium cannot be null");
+    public BigDecimal calculatePurePremium(BigDecimal predictedFrequency, BigDecimal predictedSeverity) {
+        if (predictedFrequency == null) {
+            throw new IllegalArgumentException("Predicted frequency cannot be null");
         }
-
-        BigDecimal pFactor = portfolioRiskFactor != null ? portfolioRiskFactor : BigDecimal.ONE;
-        BigDecimal hFactor = healthRiskFactor != null ? healthRiskFactor : BigDecimal.ONE;
-        BigDecimal uFactor = underwritingAdjustmentFactor != null ? underwritingAdjustmentFactor : BigDecimal.ONE;
-        BigDecimal bFactor = businessAdjustmentFactor != null ? businessAdjustmentFactor : BigDecimal.ONE;
-
-        // Formula: basePremium * portfolioRiskFactor * healthRiskFactor * underwritingAdjustmentFactor * businessAdjustmentFactor
-        BigDecimal finalPremium = basePremium
-                .multiply(pFactor)
-                .multiply(hFactor)
-                .multiply(uFactor)
-                .multiply(bFactor);
-
-        // Apply minimum premium limit of 0.00
-        if (finalPremium.compareTo(BigDecimal.ZERO) < 0) {
-            finalPremium = BigDecimal.ZERO;
+        if (predictedSeverity == null) {
+            throw new IllegalArgumentException("Predicted severity cannot be null");
         }
+        if (predictedFrequency.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Predicted frequency cannot be negative");
+        }
+        if (predictedSeverity.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Predicted severity cannot be negative");
+        }
+        return predictedFrequency.multiply(predictedSeverity).setScale(MONEY_SCALE, ROUNDING_MODE);
+    }
 
-        // Round to 2 decimal places
-        return finalPremium.setScale(2, RoundingMode.HALF_UP);
+    public BigDecimal calculateFinalPremium(BigDecimal purePremium, BigDecimal loadingRate) {
+        if (purePremium == null) {
+            throw new IllegalArgumentException("Pure premium cannot be null");
+        }
+        if (loadingRate == null) {
+            throw new IllegalArgumentException("Loading rate cannot be null");
+        }
+        if (purePremium.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Pure premium cannot be negative");
+        }
+        if (loadingRate.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Loading rate cannot be negative");
+        }
+        return purePremium.multiply(BigDecimal.ONE.add(loadingRate)).setScale(MONEY_SCALE, ROUNDING_MODE);
     }
 }

@@ -29,7 +29,7 @@ public class QuoteExpirationService {
             PremiumQuote saved = quoteRepository.save(quote);
             pricingOutboxService.enqueue(pricingEventFactory.createQuoteEvent(
                     saved,
-                    "quote.expired",
+                    "PremiumQuoteExpired",
                     null,
                     null
             ));

@@ -1,0 +1,46 @@
+erDiagram
+    INSURANCE_PRODUCTS {
+        UUID product_id PK
+        VARCHAR product_type
+        VARCHAR name
+        TEXT description
+        VARCHAR status
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    COVERAGE_PLANS {
+        UUID coverage_plan_id PK
+        UUID product_id FK
+        VARCHAR plan_name
+        TEXT description
+        NUMERIC sum_insured
+        NUMERIC loading_rate
+        VARCHAR status
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    RISK_INPUT_SCHEMAS {
+        UUID schema_id PK
+        UUID product_id FK
+        JSONB schema_definition
+        VARCHAR status
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    OCCUPATION_RISK_MAPPINGS {
+        UUID mapping_id PK
+        UUID product_id FK
+        VARCHAR occupation_code
+        VARCHAR occupation_name
+        VARCHAR risk_level "LOW, MODERATE, HIGH"
+        VARCHAR status "ACTIVE, INACTIVE"
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    INSURANCE_PRODUCTS ||--o{ COVERAGE_PLANS : has
+    INSURANCE_PRODUCTS ||--o{ RISK_INPUT_SCHEMAS : defines
+    INSURANCE_PRODUCTS ||--o{ OCCUPATION_RISK_MAPPINGS : configures

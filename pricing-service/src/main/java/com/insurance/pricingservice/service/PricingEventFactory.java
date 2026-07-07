@@ -32,8 +32,10 @@ public class PricingEventFactory {
         payloadValues.put("coveragePlanId", quote.getCoveragePlanId());
         payloadValues.put("productType", quote.getProductType());
         payloadValues.put("planName", quote.getPlanName());
-        payloadValues.put("basePremium", quote.getBasePremium());
+        payloadValues.put("purePremium", quote.getPurePremium());
+        payloadValues.put("loadingRate", quote.getLoadingRate());
         payloadValues.put("finalPremium", quote.getFinalPremium());
+        payloadValues.put("riskLevel", quote.getRiskLevel());
         payloadValues.put("currency", "VND");
         payloadValues.put("status", quote.getStatus());
         payloadValues.put("expiredAt", quote.getExpiredAt());

@@ -451,10 +451,10 @@ function CoveragePlanCard({ plan, onRegister }) {
         {/* Key numbers */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-blue-50 rounded-xl p-3">
-            <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">Phí đóng / năm</p>
+            <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">Loading rate</p>
             <p className="text-lg font-extrabold text-blue-700 mt-0.5">
-              {Number(plan.basePremium || 0).toLocaleString("vi-VN")}
-              <span className="text-xs font-normal text-blue-400">đ</span>
+              {(Number(plan.loadingRate || 0) * 100).toLocaleString("vi-VN")}
+              <span className="text-xs font-normal text-blue-400">%</span>
             </p>
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
@@ -761,19 +761,13 @@ function RiskFieldInput({ field, value, onChange, occupationMappings, riskProfil
 function QuoteExplanationPanel({ quote, planName, onEdit, onContinue, submitting }) {
   const explanation = quote?.explanation;
   const allRiskFactors = toDisplayList(explanation?.topRiskFactors).map(normalizeExplanationItem);
-  const healthRiskFactors = selectVisibleHealthFactors(allRiskFactors, 3);
+  const visibleRiskFactors = selectVisibleHealthFactors(allRiskFactors, 5);
   const shapValues = toDisplayList(explanation?.shapValues).slice(0, 5);
   const finalPremium = Number(quote.finalPremium || 0);
-  const basePremium = Number(quote.basePremium || 0);
+  const purePremium = Number(quote.purePremium || 0);
+  const loadingRate = Number(quote.loadingRate || 0);
+  const loadingAmount = finalPremium - purePremium;
   const monthlyPremium = finalPremium / 12;
-  const healthFactor = Number(quote.healthRiskFactor ?? 1);
-  const portfolioFactor = Number(quote.portfolioRiskFactor ?? 1);
-  const healthAdjustedPremium = basePremium * healthFactor;
-  const healthAdjustment = healthAdjustedPremium - basePremium;
-  const portfolioAdjustment = finalPremium - basePremium - healthAdjustment;
-  const hasPortfolioAdjustment = Math.abs(portfolioAdjustment) >= 1;
-  const hasNeutralPortfolioAdjustment = Math.abs(portfolioFactor - 1) < 0.005;
-  const portfolioBadge = formatImpactBadge(portfolioAdjustment);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
@@ -793,19 +787,13 @@ function QuoteExplanationPanel({ quote, planName, onEdit, onContinue, submitting
 
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between gap-4">
-            <span className="text-gray-500">Phí cơ bản</span>
-            <span className="font-bold text-gray-900">{formatMoney(basePremium)}</span>
+            <span className="text-gray-500">Pure premium</span>
+            <span className="font-bold text-gray-900">{formatMoney(purePremium)}</span>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <span className="text-gray-500">Điều chỉnh hồ sơ sức khỏe</span>
-            <span className={`font-bold ${healthAdjustment >= 0 ? "text-red-600" : "text-emerald-600"}`}>
-              {formatSignedMoney(healthAdjustment)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-gray-500">Điều chỉnh theo lịch sử bảo hiểm</span>
-            <span className={`font-bold ${portfolioAdjustment > 0 ? "text-red-600" : portfolioAdjustment < 0 ? "text-emerald-600" : "text-gray-900"}`}>
-              {formatSignedMoney(portfolioAdjustment)}
+            <span className="text-gray-500">Loading rate ({(loadingRate * 100).toLocaleString("vi-VN")}%)</span>
+            <span className="font-bold text-red-600">
+              {formatSignedMoney(loadingAmount)}
             </span>
           </div>
           <div className="border-t border-gray-100 pt-2 flex items-center justify-between gap-4">
@@ -821,75 +809,40 @@ function QuoteExplanationPanel({ quote, planName, onEdit, onContinue, submitting
           <span className="font-bold text-gray-900">{formatRiskLevelLabel(quote.riskLevel)}</span>
         </p>
 
-        {(healthRiskFactors.length > 0 || hasPortfolioAdjustment || hasNeutralPortfolioAdjustment) ? (
+        {visibleRiskFactors.length > 0 ? (
           <div className="space-y-5">
             <p className="font-bold text-gray-900">Vì sao phí của bạn ở mức này?</p>
 
-            {healthRiskFactors.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-xs font-extrabold uppercase text-gray-400">Hồ sơ sức khỏe</p>
-                {healthRiskFactors.map((item, index) => {
-                  const badge = formatQualitativeFactorBadge(item);
-                  const increases = item.rawContribution > 0 || item.impact.label === "Làm tăng phí";
-                  const Icon = increases ? ArrowUp : ArrowDown;
-                  return (
-                    <div key={`${item.title}-${index}`} className="grid grid-cols-[auto_1fr_auto] gap-3">
-                      <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ${increases ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-bold text-gray-900">{item.title}</p>
-                        <p className="mt-1 text-sm leading-relaxed text-gray-500">
-                          {getReadableFactorReason(item)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                      </div>
+            <div className="space-y-3">
+              <p className="text-xs font-extrabold uppercase text-gray-400">Frequency - Severity</p>
+              {visibleRiskFactors.map((item, index) => {
+                const badge = formatQualitativeFactorBadge(item);
+                const increases = item.rawContribution > 0 || item.impact.label === "Làm tăng phí";
+                const Icon = increases ? ArrowUp : ArrowDown;
+                return (
+                  <div key={`${item.title}-${index}`} className="grid grid-cols-[auto_1fr_auto] gap-3">
+                    <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ${increases ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-bold text-gray-900">{item.title}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-gray-500">
+                        {getReadableFactorReason(item)}
+                      </p>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {(hasPortfolioAdjustment || hasNeutralPortfolioAdjustment) && (
-              <div className="space-y-3">
-                <p className="text-xs font-extrabold uppercase text-gray-400">Lịch sử bảo hiểm</p>
-                {(() => {
-                  const increases = portfolioAdjustment > 0;
-                  const neutral = hasNeutralPortfolioAdjustment;
-                  const Icon = neutral ? Clock : increases ? ArrowUp : ArrowDown;
-                  return (
-                    <div className="grid grid-cols-[auto_1fr_auto] gap-3">
-                      <span className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ${neutral ? "bg-gray-50 text-gray-500" : increases ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
-                        <Icon className="h-4 w-4" />
+                    <div className="text-right">
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${badge.className}`}>
+                        {badge.label}
                       </span>
-                      <div className="min-w-0">
-                        <p className="font-bold text-gray-900">Mức sử dụng quyền lợi</p>
-                        <p className="mt-1 text-sm leading-relaxed text-gray-500">
-                          {neutral
-                            ? "Chưa có đủ dữ liệu lịch sử nên hệ thống áp dụng mức trung tính."
-                            : increases
-                              ? "Lịch sử sử dụng dịch vụ y tế làm phí tăng so với khách hàng có hồ sơ tương đương."
-                              : "Lịch sử sử dụng quyền lợi thấp giúp giảm phí so với khách hàng có hồ sơ tương đương."}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${portfolioBadge.className}`}>
-                          {portfolioBadge.label}
-                        </span>
-                      </div>
                     </div>
-                  );
-                })()}
-              </div>
-            )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <div className="rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-800">
-            Chưa có danh sách yếu tố chi tiết từ AI model. Báo giá vẫn dùng phí cơ sở và các hệ số rủi ro hiện có.
+            Chưa có danh sách yếu tố chi tiết từ AI model. Báo giá vẫn dùng predicted frequency, predicted severity và loading rate của gói.
           </div>
         )}
       </div>
@@ -1149,8 +1102,8 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="rounded-xl bg-blue-50 p-4">
-              <p className="text-[10px] font-bold uppercase text-blue-400">Phí gốc</p>
-              <p className="text-lg font-extrabold text-blue-700">{formatMoney(plan.basePremium)}</p>
+              <p className="text-[10px] font-bold uppercase text-blue-400">Loading rate</p>
+              <p className="text-lg font-extrabold text-blue-700">{(Number(plan.loadingRate || 0) * 100).toLocaleString("vi-VN")}%</p>
             </div>
             <div className="rounded-xl bg-gray-50 p-4">
               <p className="text-[10px] font-bold uppercase text-gray-400">Số tiền bảo hiểm</p>

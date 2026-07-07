@@ -1,0 +1,78 @@
+erDiagram
+    INSURANCE_CONTRACTS {
+        UUID contract_id PK "Khóa chính hợp đồng"
+        UUID applicant_user_id "ID người mua bảo hiểm (User Service)"
+        UUID insured_person_id "ID người được bảo hiểm (User Service)"
+        UUID quote_id UK "Mã báo giá được chấp nhận (Pricing Service)"
+        UUID product_id "Sản phẩm bảo hiểm (Product Service)"
+        UUID coverage_plan_id "Gói bảo hiểm (Product Service)"
+        
+        VARCHAR product_type "Loại sản phẩm (HEALTH, LIFE, MOTOR)"
+        VARCHAR type_policy "Phân khúc gói (STANDARD, GOLD, PLATINUM)"
+        VARCHAR reimbursement "Tỷ lệ bồi thường (FULL, CO_PAY_80_20)"
+        VARCHAR distribution_channel "Kênh phân phối (DIRECT, AGENT, ONLINE)"
+        
+        NUMERIC quoted_premium "Phí bảo hiểm báo giá (final_premium)"
+        NUMERIC pure_premium "Pure premium tại thời điểm báo giá"
+        NUMERIC loading_rate "Loading rate snapshot tại thời điểm báo giá"
+        NUMERIC sum_insured "Hạn mức bảo hiểm tối đa"
+        
+        DATE effective_date "Ngày hợp đồng bắt đầu hiệu lực"
+        DATE expiry_date "Ngày hợp đồng hết hiệu lực"
+        NUMERIC exposure_time "Thời hạn bảo hiểm quy đổi theo năm (ví dụ: 1.0)"
+        
+        BOOLEAN new_business "Có phải hợp đồng mới (true) hay tái tục (false)"
+        INTEGER policy_year "Năm bảo hiểm thứ mấy (bắt đầu từ 1)"
+        
+        VARCHAR status "Trạng thái hợp đồng (DRAFT, SUBMITTED, PAYMENT_PENDING, PAYMENT_FAILED, ACTIVE, EXPIRED, CANCELLED, REJECTED)"
+        
+        TIMESTAMPTZ submitted_at "Thời điểm gửi đơn"
+        TIMESTAMPTZ issued_at "Thời điểm phát hành hợp đồng"
+        TIMESTAMPTZ created_at "Thời điểm tạo record"
+        TIMESTAMPTZ updated_at "Thời điểm cập nhật record"
+    }
+
+    POLICY_EXPERIENCE_SUMMARIES {
+        UUID summary_id PK "Khóa chính bản tổng hợp"
+        UUID insured_person_id "ID người được bảo hiểm (dùng để query)"
+        UUID policyholder_user_id "ID người mua bảo hiểm (chủ hộ/chủ hợp đồng)"
+        VARCHAR product_type "Loại hình sản phẩm (HEALTH)"
+        
+        NUMERIC prev_cost_claims_year "Tổng tiền claim năm gần nhất"
+        INTEGER prev_n_medical_services "Số lần khám năm gần nhất"
+        BOOLEAN prev_had_claim_or_service "Có claim hoặc khám năm ngoái không"
+        BOOLEAN claim_free_previous_year "Năm ngoái hoàn toàn sạch claim không"
+        
+        NUMERIC total_past_claim_amount "Tổng tiền claim tích lũy lịch sử"
+        INTEGER past_claim_count "Tổng số lần claim tích lũy lịch sử"
+        INTEGER claim_free_years "Số năm liên tiếp sạch claim (tối đa 5)"
+        NUMERIC recency_weighted_claim_score "Điểm claim theo trọng số thời gian gần đây"
+        
+        DATE last_claim_date "Ngày cuối cùng yêu cầu bồi thường"
+        VARCHAR claim_severity_level "Mức độ nghiêm trọng của claims (LOW, MEDIUM, HIGH)"
+        
+        NUMERIC seniority_insured "Thâm niên đóng bảo hiểm của khách hàng (năm)"
+        INTEGER active_policy_count "Số lượng hợp đồng đang hoạt động"
+        INTEGER completed_policy_count "Số lượng hợp đồng đã hoàn thành"
+        
+        TIMESTAMPTZ calculated_at "Thời điểm tính toán tổng hợp"
+        TIMESTAMPTZ updated_at "Thời điểm cập nhật"
+    }
+
+    CLAIM_EXPERIENCE_RECORDS {
+        UUID record_id PK "Khóa chính dòng log bồi thường"
+        UUID contract_id FK "Liên kết hợp đồng nào phát sinh claim này"
+        UUID insured_person_id "ID người được bảo hiểm"
+        UUID policyholder_user_id "ID chủ hợp đồng"
+        VARCHAR product_type "Loại hình sản phẩm (HEALTH)"
+        
+        DATE experience_date "Ngày phát sinh sự kiện claim"
+        NUMERIC claim_amount "Số tiền claim được phê duyệt"
+        INTEGER n_medical_services "Số lần sử dụng dịch vụ y tế trong đợt này"
+        BOOLEAN had_claim_or_service "Có phát sinh claim/y tế không"
+        VARCHAR severity_level "Độ nghiêm trọng của đợt khám (LOW, MEDIUM, HIGH)"
+        VARCHAR source "Nguồn gốc log (ví dụ: IMPORTED, SYSTEM_CLAIM)"
+        TIMESTAMPTZ imported_at "Thời điểm log ghi nhận"
+    }
+
+    INSURANCE_CONTRACTS ||--o{ CLAIM_EXPERIENCE_RECORDS : has

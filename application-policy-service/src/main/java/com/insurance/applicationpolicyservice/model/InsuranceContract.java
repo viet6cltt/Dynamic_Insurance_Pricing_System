@@ -53,8 +53,11 @@ public class InsuranceContract {
     @Column(name = "quoted_premium", nullable = false)
     private BigDecimal quotedPremium;
 
-    @Column(name = "base_premium", nullable = false)
-    private BigDecimal basePremium;
+    @Column(name = "pure_premium", nullable = false)
+    private BigDecimal purePremium;
+
+    @Column(name = "loading_rate", nullable = false)
+    private BigDecimal loadingRate;
 
     @Column(name = "sum_insured", nullable = false)
     private BigDecimal sumInsured;

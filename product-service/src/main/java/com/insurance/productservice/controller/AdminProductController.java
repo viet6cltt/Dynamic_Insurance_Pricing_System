@@ -80,6 +80,13 @@ public class AdminProductController {
         return ResponseEntity.ok(planService.updateCoveragePlanStatus(coveragePlanId, status));
     }
 
+    @PatchMapping("/coverage-plans/{coveragePlanId}/loading-rate")
+    public ResponseEntity<CoveragePlanResponse> updateCoveragePlanLoadingRate(
+            @PathVariable UUID coveragePlanId,
+            @RequestBody UpdateLoadingRateRequest request) {
+        return ResponseEntity.ok(planService.updateLoadingRate(coveragePlanId, request));
+    }
+
     // --- Risk Input Schema Admin ---
 
     @PostMapping("/products/{productId}/risk-input-schemas")

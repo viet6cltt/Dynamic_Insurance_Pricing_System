@@ -14,7 +14,7 @@ from joblib import load
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 
-from .config import dataset_version, model_alias, reference_dataset_path, risk_factor_max, risk_factor_min
+from .config import dataset_version, model_alias, reference_dataset_path
 from .db import engine, pure_premium_baselines, utcnow
 from .mlflow_registry import MlflowRegistry
 from .schemas import HealthPricingPredictionRequest, PurePremiumPredictionRequest
@@ -264,32 +264,45 @@ class PurePremiumRuntime:
         type_product = str(row.get("type_product") or "HEALTH")
         baseline = self.active_baseline(type_product)
         baseline_value = float(baseline["baseline_value"]) if baseline else max(values["predictedPurePremium"], 1e-6)
-        raw_factor = values["predictedPurePremium"] / max(baseline_value, 1e-6)
-        applied_factor = min(max(raw_factor, risk_factor_min()), risk_factor_max())
+        relative_cost = values["predictedPurePremium"] / max(baseline_value, 1e-6)
         explanation_status = "available"
         try:
-            risk_factors = self.risk_factor_explanation(row, raw_factor)
+            top_factors = self.pure_premium_explanation(row, relative_cost)
         except Exception:
-            risk_factors = []
+            top_factors = []
             explanation_status = "unavailable"
 
         return {
-            "modelVersion": "frequency-severity-pure-premium-v1",
+            "predictedAnnualFrequency": values["predictedFrequencyAnnual"],
+            "predictedAverageSeverity": values["predictedSeverity"],
+            "purePremium": values["predictedPurePremium"],
+            "riskLevel": self.risk_level(relative_cost),
             "frequencyModelVersion": self.frequency.version,
             "severityModelVersion": self.severity.version,
-            **values,
-            "baselinePurePremium": baseline_value,
-            "rawRiskFactor": raw_factor,
-            "appliedRiskFactor": applied_factor,
-            "riskFactors": risk_factors,
-            "explanationStatus": explanation_status,
+            "frequencyExplanation": {
+                "topFactors": top_factors,
+                "method": "counterfactual_frequency_delta",
+                "status": explanation_status,
+            },
+            "severityExplanation": {
+                "topFactors": top_factors,
+                "method": "counterfactual_severity_delta",
+                "status": explanation_status,
+            },
         }
 
-    def risk_factor_explanation(self, row: dict[str, Any], raw_factor: float, limit: int = 5) -> list[dict[str, Any]]:
+    def risk_level(self, relative_cost: float) -> str:
+        if relative_cost < 0.9:
+            return "LOW"
+        if relative_cost < 1.3:
+            return "MEDIUM"
+        return "HIGH"
+
+    def pure_premium_explanation(self, row: dict[str, Any], relative_cost: float, limit: int = 5) -> list[dict[str, Any]]:
         defaults = {**self.frequency.metadata.get("featureDefaults", {}), **self.severity.metadata.get("featureDefaults", {})}
-        baseline_value = raw_factor if raw_factor else 1.0
         factors = []
         base_values = self.predict_values(row)
+        baseline_value = max(abs(base_values["predictedPurePremium"]), 1e-6)
         for feature in EXPLANATION_FEATURES:
             if feature == "gender" or feature not in row or feature not in defaults:
                 continue
@@ -299,9 +312,7 @@ class PurePremiumRuntime:
             changed = dict(row)
             changed[feature] = baseline_feature_value
             changed_values = self.predict_values(changed)
-            current_factor = base_values["predictedPurePremium"] / max(base_values["predictedPurePremium"] / max(raw_factor, 1e-6), 1e-6)
-            changed_factor = changed_values["predictedPurePremium"] / max(base_values["predictedPurePremium"] / max(raw_factor, 1e-6), 1e-6)
-            contribution = current_factor - changed_factor
+            contribution = base_values["predictedPurePremium"] - changed_values["predictedPurePremium"]
             factors.append(
                 {
                     "feature": feature,

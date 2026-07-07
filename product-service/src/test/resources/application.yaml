@@ -8,3 +8,10 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
+
+minio:
+  endpoint: http://localhost:9000
+  external-url: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadminpassword
+  bucket-name: insurance-products-test
