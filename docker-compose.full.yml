@@ -368,6 +368,9 @@ services:
       REDIRECT_URI: ${REDIRECT_URI:-http://localhost:3000/login/oauth2/code/custom}
       CLIENT_APP_URI: ${CLIENT_APP_URI:-http://localhost:3000}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-your-google-client-id}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-your-google-client-secret}
+      GOOGLE_REDIRECT_PATH: ${GOOGLE_REDIRECT_PATH:-/login/oauth2/code/google}
       USER_SERVICE_URI: http://user-service:8081
 
   user-service:

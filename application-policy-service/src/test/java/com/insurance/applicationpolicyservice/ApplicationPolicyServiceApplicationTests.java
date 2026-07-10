@@ -118,7 +118,7 @@ public class ApplicationPolicyServiceApplicationTests {
         // Stub Pricing Service Calls
         ValidateQuoteResponse validateResp = new ValidateQuoteResponse(
                 true, quoteId, buyerUserId, insuredPersonId, productId, coveragePlanId,
-                BigDecimal.valueOf(100.0), new BigDecimal("0.20"), BigDecimal.valueOf(120.0),
+                "Yes", BigDecimal.valueOf(100.0), new BigDecimal("0.20"), BigDecimal.valueOf(120.0),
                 "GENERATED", Instant.now().plusSeconds(3600)
         );
         Mockito.when(pricingServiceClient.validateQuote(eq(quoteId), any(ValidateQuoteRequest.class)))
@@ -126,7 +126,7 @@ public class ApplicationPolicyServiceApplicationTests {
 
         QuoteResponse quoteResp = new QuoteResponse(
                 quoteId, buyerUserId, insuredPersonId, productId, coveragePlanId, "HEALTH", "STANDARD_PLAN",
-                BigDecimal.valueOf(1000000.0), BigDecimal.valueOf(10.0), BigDecimal.valueOf(10.0),
+                "Yes", BigDecimal.valueOf(1000000.0), BigDecimal.valueOf(10.0), BigDecimal.valueOf(10.0),
                 BigDecimal.valueOf(100.0), new BigDecimal("0.20"), BigDecimal.valueOf(120.0),
                 "frequency-v4", "severity-v1",
                 "STANDARD", "USED", Instant.now(), Instant.now().plusSeconds(3600)

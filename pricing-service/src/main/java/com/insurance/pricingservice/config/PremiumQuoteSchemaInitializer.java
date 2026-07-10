@@ -43,9 +43,16 @@ public class PremiumQuoteSchemaInitializer implements ApplicationRunner {
                         ALTER TABLE premium_quotes
                             ADD COLUMN IF NOT EXISTS loading_rate NUMERIC(5, 4);
 
+                        ALTER TABLE premium_quotes
+                            ADD COLUMN IF NOT EXISTS reimbursement VARCHAR(255);
+
                         UPDATE premium_quotes
                         SET predicted_frequency = COALESCE(predicted_frequency, 0),
-                            loading_rate = COALESCE(loading_rate, 0);
+                            loading_rate = COALESCE(loading_rate, 0),
+                            reimbursement = COALESCE(reimbursement, 'No');
+
+                        ALTER TABLE premium_quotes
+                            ALTER COLUMN reimbursement SET NOT NULL;
 
                         IF EXISTS (
                             SELECT 1

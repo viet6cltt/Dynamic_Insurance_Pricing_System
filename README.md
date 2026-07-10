@@ -71,7 +71,8 @@ VITE_GG_CLIENT_ID=<GOOGLE_CLIENT_ID>
 VITE_GOOGLE_REDIRECT_URI=http://localhost:3000/login/oauth2/code/google
 ```
 
-Chạy toàn bộ backend stack:
+Chạy toàn bộ backend stack. Lệnh này không chạy frontend vì
+`docker-compose.full.yml` hiện không khai báo service frontend:
 
 ```bash
 docker compose --env-file .env -f docker-compose.full.yml up -d --build
@@ -90,6 +91,84 @@ cd frontend
 npm install
 npm run dev -- --host 0.0.0.0 --port 3000
 ```
+
+## Seed Tài Khoản Admin Lần Đầu
+
+Google OAuth user mới mặc định được tạo với `ROLE_USER`, không tự có quyền
+admin. Reviewer cần tạo tài khoản một lần trước để hệ thống có bản ghi trong
+`auth_users` và `user_profiles`, sau đó cấp role admin cho email đó trong
+`auth-db`.
+
+Có hai cách tạo tài khoản ban đầu:
+
+1. Google OAuth: mở `http://localhost:3000/login`, đăng nhập Google. Cách này
+   không cần set mật khẩu local.
+2. Email/password: đăng ký trên UI, hoặc gọi API dưới đây để tạo user local có
+   mật khẩu:
+
+```bash
+curl -X POST http://localhost:9000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "reviewer@example.com",
+    "password": "Reviewer@123",
+    "fullName": "Reviewer Admin",
+    "phoneNumber": "0900000000",
+    "identityNumber": "999999999",
+    "dateOfBirth": "1990-01-01",
+    "gender": "MALE",
+    "role": "USER"
+  }'
+```
+
+Thay `reviewer@example.com` bằng email đã dùng để đăng nhập:
+
+```bash
+docker compose --env-file .env -f docker-compose.full.yml exec -T auth-db psql -U postgres -d auth_db -c "
+insert into auth_roles (role_id, role_name)
+values (gen_random_uuid(), 'ROLE_ADMIN')
+on conflict (role_name) do nothing;
+
+insert into auth_user_roles (auth_user_id, role_id)
+select u.auth_user_id, r.role_id
+from auth_users u
+join auth_roles r on r.role_name = 'ROLE_ADMIN'
+where u.email = 'reviewer@example.com'
+on conflict do nothing;
+"
+```
+
+Kiểm tra lại role:
+
+```bash
+docker compose --env-file .env -f docker-compose.full.yml exec -T auth-db psql -U postgres -d auth_db -c "
+select u.email, r.role_name
+from auth_users u
+join auth_user_roles ur on ur.auth_user_id = u.auth_user_id
+join auth_roles r on r.role_id = ur.role_id
+where u.email = 'reviewer@example.com';
+"
+```
+
+Sau khi cấp quyền, đăng xuất rồi đăng nhập lại để token mới chứa
+`ROLE_ADMIN`. Trang quản trị nằm ở:
+
+```text
+http://localhost:3000/admin
+```
+
+Luồng đăng nhập sau khi seed:
+
+1. Mở frontend tại `http://localhost:3000`.
+2. Đăng nhập bằng đúng email vừa được cấp quyền admin. Có thể dùng Google OAuth
+   nếu đã cấu hình `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, hoặc dùng
+   email/password đã đăng ký, ví dụ `reviewer@example.com` / `Reviewer@123`
+   nếu dùng lệnh `curl` phía trên.
+3. Nếu tài khoản đã đăng nhập trước khi chạy SQL seed, cần logout rồi login lại
+   để frontend nhận access token mới có `ROLE_ADMIN`.
+4. Vào `http://localhost:3000/admin`. Nếu vẫn bị chuyển về trang login hoặc
+   không thấy giao diện quản trị, kiểm tra lại role trong `auth-db` bằng câu
+   lệnh kiểm tra ở trên.
 
 Các URL thường dùng:
 

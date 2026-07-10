@@ -1134,6 +1134,7 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
   const [quote, setQuote] = useState(null);
   const [contract, setContract] = useState(null);
   const [payment, setPayment] = useState(null);
+  const reimbursementEnabled = Boolean(plan?.reimbursementEnabled);
   const [newInsured, setNewInsured] = useState({
     fullName: "",
     dateOfBirth: "",
@@ -1144,6 +1145,11 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
 
   const productId = product?.productId;
   const fields = getRiskFields(schema);
+  const newInsuredReady = Boolean(
+    newInsured.fullName.trim()
+    && newInsured.dateOfBirth
+    && newInsured.identityNumber.trim()
+  );
 
   useEffect(() => {
     if (!productId) return undefined;
@@ -1218,11 +1224,17 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
 
   const handleCreateInsuredPerson = async (event) => {
     event.preventDefault();
+    if (!newInsuredReady) {
+      setError("Vui lòng nhập đầy đủ họ tên, ngày sinh và CCCD/CMND.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
       const created = await customerService.createInsuredPerson({
         ...newInsured,
+        fullName: newInsured.fullName.trim(),
+        identityNumber: newInsured.identityNumber.trim(),
         dateOfBirth: newInsured.dateOfBirth || null,
         linkedUserProfileId: null,
       });
@@ -1249,11 +1261,16 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
     try {
       let insuredPersonId = selectedInsuredPersonId;
       if (selectedInsuredPersonId === SELF_OPTION_ID && selfOption) {
+        if (!selfOption.identityNumber?.trim()) {
+          setError("Hồ sơ cá nhân của bạn chưa có CCCD/CMND. Vui lòng cập nhật hồ sơ hoặc thêm người được bảo hiểm mới.");
+          setSubmitting(false);
+          return;
+        }
         const createdSelf = await customerService.createInsuredPerson({
-          fullName: selfOption.fullName,
+          fullName: selfOption.fullName.trim(),
           dateOfBirth: selfOption.dateOfBirth || null,
           gender: selfOption.gender || "MALE",
-          identityNumber: selfOption.identityNumber || "",
+          identityNumber: selfOption.identityNumber.trim(),
           relationshipToOwner: "SELF",
           linkedUserProfileId: null,
         });
@@ -1266,6 +1283,7 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
         insuredPersonId,
         productId: product.productId,
         coveragePlanId: plan.coveragePlanId,
+        reimbursementEnabled,
         riskProfile: coerceRiskProfile(fields, riskProfile),
       });
       const quoteDetail = await customerService.getQuoteById(createdQuote.quoteId);
@@ -1287,7 +1305,7 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
         insuredPersonId: quote.insuredPersonId,
         productId: quote.productId,
         coveragePlanId: quote.coveragePlanId,
-        simulatePaymentResult: "SUCCESS",
+        simulatePaymentResult: "PENDING",
       });
       setContract(createdContract);
 
@@ -1350,7 +1368,7 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
                 <p><span className="text-gray-500">Mã hợp đồng:</span> <span className="font-bold text-gray-900">{contract.contractId}</span></p>
                 <p><span className="text-gray-500">Trạng thái:</span> <span className="font-bold text-gray-900">{contract.status}</span></p>
                 <p><span className="text-gray-500">Phí cuối:</span> <span className="font-bold text-gray-900">{formatMoney(contract.quotedPremium)}</span></p>
-                <p><span className="text-gray-500">Thanh toán:</span> <span className="font-bold text-gray-900">{payment?.status || contract.paymentStatus || "Đã khởi tạo"}</span></p>
+                <p><span className="text-gray-500">Thanh toán:</span> <span className="font-bold text-gray-900">{payment?.status || contract.paymentStatus || "Chờ thanh toán"}</span></p>
               </div>
               <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700">
                 Hoàn tất
@@ -1398,13 +1416,14 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-                  <input value={newInsured.fullName} onChange={(e) => setNewInsured({ ...newInsured, fullName: e.target.value })} placeholder="Họ tên" className="md:col-span-2 rounded-xl border border-gray-200 px-3 py-2.5 text-sm" />
+                <div className="grid grid-cols-1 md:grid-cols-8 gap-3">
+                  <input value={newInsured.fullName} onChange={(e) => setNewInsured({ ...newInsured, fullName: e.target.value })} placeholder="Họ tên *" className="md:col-span-2 rounded-xl border border-gray-200 px-3 py-2.5 text-sm" />
                   <input type="date" value={newInsured.dateOfBirth} onChange={(e) => setNewInsured({ ...newInsured, dateOfBirth: e.target.value })} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm" />
                   <select value={newInsured.gender} onChange={(e) => setNewInsured({ ...newInsured, gender: e.target.value })} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm">
                     <option value="MALE">Nam</option>
                     <option value="FEMALE">Nữ</option>
                   </select>
+                  <input value={newInsured.identityNumber} onChange={(e) => setNewInsured({ ...newInsured, identityNumber: e.target.value.trimStart() })} placeholder="CCCD/CMND *" inputMode="numeric" autoComplete="off" className="md:col-span-2 rounded-xl border border-gray-200 px-3 py-2.5 text-sm" />
                   <select value={newInsured.relationshipToOwner} onChange={(e) => setNewInsured({ ...newInsured, relationshipToOwner: e.target.value })} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm">
                     <option value="SPOUSE">Vợ/chồng</option>
                     <option value="CHILD">Con</option>
@@ -1412,9 +1431,27 @@ function QuoteFlowModal({ plan, product, onClose, onSuccess }) {
                     <option value="FAMILY">Người thân</option>
                     <option value="OTHER">Khác</option>
                   </select>
-                  <button type="button" onClick={handleCreateInsuredPerson} disabled={submitting || !newInsured.fullName || !newInsured.dateOfBirth} className="rounded-xl bg-gray-900 px-3 py-2.5 text-sm font-bold text-white disabled:bg-gray-300">
+                  <button type="button" onClick={handleCreateInsuredPerson} disabled={submitting || !newInsuredReady} className="rounded-xl bg-gray-900 px-3 py-2.5 text-sm font-bold text-white disabled:bg-gray-300">
                     Thêm
                   </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-bold text-gray-900">Hình thức quyền lợi</h4>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Quyền lợi này được cấu hình bởi quản trị viên theo từng gói.
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-bold ${
+                    reimbursementEnabled
+                      ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                      : "border-gray-100 bg-gray-50 text-gray-500"
+                  }`}>
+                    {reimbursementEnabled ? "Có hoàn trả" : "Không hoàn trả"}
+                  </span>
                 </div>
               </div>
 

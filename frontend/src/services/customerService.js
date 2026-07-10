@@ -19,13 +19,31 @@ export const customerService = {
     }
   },
 
+  getPolicyHistorySummaries: async () => {
+    try {
+      return await axiosClient.get("/contracts/policy-history/me");
+    } catch (error) {
+      console.error("Failed to fetch policy history summaries", error);
+      return [];
+    }
+  },
+
+  getPolicyHistorySummariesByInsuredPersonIds: async (insuredPersonIds = []) => {
+    try {
+      return await axiosClient.post("/contracts/policy-history/summaries", { insuredPersonIds });
+    } catch (error) {
+      console.error("Failed to fetch policy history summaries by insured persons", error);
+      return [];
+    }
+  },
+
   createContract: async (payload) => {
     // payload: { quoteId, insuredPersonId, productId, coveragePlanId, simulatePaymentResult? }
     return axiosClient.post("/contracts", payload);
   },
 
-  payContract: async (contractId) => {
-    return axiosClient.post(`/contracts/${contractId}/pay`);
+  payContract: async (contractId, simulatePaymentResult = "SUCCESS") => {
+    return axiosClient.post(`/contracts/${contractId}/pay`, { simulatePaymentResult });
   },
 
   // ── Insured Persons ────────────────────────────────────────────────────────

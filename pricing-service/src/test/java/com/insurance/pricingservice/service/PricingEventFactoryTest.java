@@ -23,6 +23,7 @@ class PricingEventFactoryTest {
                 .coveragePlanId(UUID.randomUUID())
                 .productType("HEALTH")
                 .planName("Gold")
+                .reimbursement("No")
                 .sumInsured(new BigDecimal("100000000.00"))
                 .purePremium(new BigDecimal("1000000.00"))
                 .loadingRate(new BigDecimal("0.1000"))

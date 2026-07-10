@@ -257,6 +257,7 @@ class PricingQuoteServiceTest {
                 .coveragePlanId(UUID.randomUUID())
                 .productType("HEALTH")
                 .planName("Standard Gold Plan")
+                .reimbursement("No")
                 .sumInsured(new BigDecimal("150000000.00"))
                 .predictedFrequency(new BigDecimal("1.000000"))
                 .predictedSeverity(new BigDecimal("2500000.00"))

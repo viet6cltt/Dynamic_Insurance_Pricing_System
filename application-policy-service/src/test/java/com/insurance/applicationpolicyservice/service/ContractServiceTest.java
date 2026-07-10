@@ -90,7 +90,7 @@ class ContractServiceTest {
                         null, Instant.now(), Instant.now()));
         when(pricingServiceClient.markQuoteUsed(quoteId)).thenReturn(new QuoteResponse(
                 quoteId, buyerUserId, insuredPersonId, productId, coveragePlanId, "HEALTH",
-                "Gold", new BigDecimal("100000000.00"), BigDecimal.ONE, new BigDecimal("1000000.00"),
+                "Gold", "Yes", new BigDecimal("100000000.00"), BigDecimal.ONE, new BigDecimal("1000000.00"),
                 new BigDecimal("1000000.00"), new BigDecimal("0.2000"), new BigDecimal("1200000.00"),
                 "freq-v1", "sev-v1", "LOW", "USED", Instant.now(), Instant.now()));
 
@@ -108,7 +108,7 @@ class ContractServiceTest {
         UUID quoteId = UUID.randomUUID();
         when(pricingServiceClient.validateQuote(eq(quoteId), any()))
                 .thenReturn(new ValidateQuoteResponse(false, quoteId, null, null, null, null,
-                        null, null, null, "EXPIRED", Instant.now()));
+                        null, null, null, null, "EXPIRED", Instant.now()));
 
         assertThrows(IllegalArgumentException.class, () -> service.createContract(UUID.randomUUID(),
                 new CreateContractRequest(quoteId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null)));
@@ -224,6 +224,7 @@ class ContractServiceTest {
                 insuredPersonId,
                 productId,
                 coveragePlanId,
+                "Yes",
                 new BigDecimal("1000000.00"),
                 new BigDecimal("0.2000"),
                 new BigDecimal("1200000.00"),

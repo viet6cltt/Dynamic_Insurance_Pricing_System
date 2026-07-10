@@ -54,6 +54,7 @@ class QuoteExpirationServiceTest {
                 .coveragePlanId(UUID.randomUUID())
                 .productType("HEALTH")
                 .planName("Gold")
+                .reimbursement("No")
                 .sumInsured(new BigDecimal("100000000.00"))
                 .predictedFrequency(new BigDecimal("1.000000"))
                 .predictedSeverity(new BigDecimal("1000000.00"))

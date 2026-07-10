@@ -220,6 +220,7 @@ public class PricingQuoteControllerTest {
                 .coveragePlanId(UUID.randomUUID())
                 .productType("HEALTH")
                 .planName("Premium Gold Plan")
+                .reimbursement("Yes")
                 .sumInsured(new BigDecimal("150000000.00"))
                 .predictedFrequency(new BigDecimal("0.000000"))
                 .predictedSeverity(new BigDecimal("0.00"))

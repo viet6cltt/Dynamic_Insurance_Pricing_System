@@ -41,6 +41,9 @@ public class PremiumQuote {
     @Column(name = "plan_name", nullable = false)
     private String planName;
 
+    @Column(name = "reimbursement")
+    private String reimbursement;
+
     @Column(name = "sum_insured", nullable = false, precision = 15, scale = 2)
     private BigDecimal sumInsured;
 

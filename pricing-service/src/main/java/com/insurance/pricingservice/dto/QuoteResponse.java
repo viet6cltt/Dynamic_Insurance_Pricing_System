@@ -12,6 +12,7 @@ public record QuoteResponse(
     UUID coveragePlanId,
     String productType,
     String planName,
+    String reimbursement,
     BigDecimal sumInsured,
     BigDecimal predictedAnnualFrequency,
     BigDecimal predictedAverageSeverity,

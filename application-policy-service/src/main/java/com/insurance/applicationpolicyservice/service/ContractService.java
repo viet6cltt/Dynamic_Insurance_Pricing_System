@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Slf4j
@@ -74,7 +75,7 @@ public class ContractService {
                 .coveragePlanId(request.coveragePlanId())
                 .productType("HEALTH") // Default product type
                 .typePolicy("STANDARD") // Default policy segment
-                .reimbursement("FULL") // Default reimbursement type
+                .reimbursement(normalizeReimbursement(validateResponse.reimbursement()))
                 .distributionChannel("DIRECT") // Default channel
                 .purePremium(validateResponse.purePremium())
                 .loadingRate(validateResponse.loadingRate())
@@ -89,8 +90,8 @@ public class ContractService {
         InsuranceContract savedContract = contractRepository.save(contract);
         log.info("Contract initialized with ID: {} and status: PAYMENT_PENDING", savedContract.getContractId());
 
-        // 3. Create mock payment in Payment Service. Contract activation is event-driven.
-        PaymentResponse paymentResponse = createPayment(savedContract, request.simulatePaymentResult());
+        // 3. Create pending mock payment in Payment Service. User confirms outcome later via /pay.
+        PaymentResponse paymentResponse = createPayment(savedContract, "PENDING");
         savedContract.setPaymentId(paymentResponse.paymentId());
         savedContract.setPaymentStatus(paymentResponse.status());
 
@@ -104,6 +105,7 @@ public class ContractService {
                 savedContract.setLoadingRate(quoteDetails.loadingRate());
                 savedContract.setQuotedPremium(quoteDetails.finalPremium());
                 savedContract.setSumInsured(quoteDetails.sumInsured());
+                savedContract.setReimbursement(normalizeReimbursement(quoteDetails.reimbursement()));
             }
         } catch (Exception e) {
             log.warn("Failed to mark quote as used in Pricing Service: {}", e.getMessage());
@@ -135,8 +137,40 @@ public class ContractService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<PolicyHistorySummaryResponse> getMyPolicyHistorySummaries(UUID buyerUserId) {
+        return summaryRepository.findByPolicyholderUserIdOrderByUpdatedAtDesc(buyerUserId)
+                .stream()
+                .map(this::mapPolicyHistorySummaryToResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PolicyHistorySummaryResponse> getPolicyHistorySummariesByInsuredPersonIds(List<UUID> insuredPersonIds) {
+        List<UUID> lookupIds = insuredPersonIds == null
+                ? List.of()
+                : insuredPersonIds.stream()
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList();
+
+        if (lookupIds.isEmpty()) {
+            return List.of();
+        }
+
+        return summaryRepository.findByInsuredPersonIdInOrderByUpdatedAtDesc(lookupIds)
+                .stream()
+                .map(this::mapPolicyHistorySummaryToResponse)
+                .toList();
+    }
+
     @Transactional
     public ContractResponse payContract(UUID buyerUserId, UUID contractId) {
+        return payContract(buyerUserId, contractId, "SUCCESS");
+    }
+
+    @Transactional
+    public ContractResponse payContract(UUID buyerUserId, UUID contractId, String simulatePaymentResult) {
         InsuranceContract contract = contractRepository.findByIdForUpdate(contractId)
                 .orElseThrow(() -> new IllegalArgumentException("Contract not found with ID: " + contractId));
 
@@ -156,7 +190,7 @@ public class ContractService {
         contract.setStatus(ContractStatus.PAYMENT_PENDING);
         PaymentResponse paymentResponse = createPayment(
                 contract,
-                "SUCCESS",
+                normalizePaymentSimulation(simulatePaymentResult),
                 "contract-pay-" + contract.getContractId() + "-" + UUID.randomUUID(),
                 "CUSTOMER_PAYMENT"
         );
@@ -208,6 +242,24 @@ public class ContractService {
     }
 
     // --- Helper Methods ---
+
+    private String normalizeReimbursement(String reimbursement) {
+        if (reimbursement == null || reimbursement.isBlank()) {
+            return "No";
+        }
+        return reimbursement;
+    }
+
+    private String normalizePaymentSimulation(String simulatePaymentResult) {
+        if (simulatePaymentResult == null || simulatePaymentResult.isBlank()) {
+            return "SUCCESS";
+        }
+        String normalized = simulatePaymentResult.trim().toUpperCase();
+        if (!normalized.equals("SUCCESS") && !normalized.equals("FAILED") && !normalized.equals("PENDING")) {
+            throw new IllegalArgumentException("Unsupported payment simulation result: " + simulatePaymentResult);
+        }
+        return normalized;
+    }
 
     private PaymentResponse createPayment(InsuranceContract contract, String simulatePaymentResult) {
         return createPayment(
@@ -338,6 +390,30 @@ public class ContractService {
                 record.getSeverityLevel(),
                 record.getSource(),
                 record.getImportedAt()
+        );
+    }
+
+    private PolicyHistorySummaryResponse mapPolicyHistorySummaryToResponse(PolicyExperienceSummary summary) {
+        return new PolicyHistorySummaryResponse(
+                summary.getSummaryId(),
+                summary.getInsuredPersonId(),
+                summary.getPolicyholderUserId(),
+                summary.getProductType(),
+                summary.getPrevCostClaimsYear(),
+                summary.getPrevNMedicalServices(),
+                summary.getPrevHadClaimOrService(),
+                summary.getClaimFreePreviousYear(),
+                summary.getTotalPastClaimAmount(),
+                summary.getPastClaimCount(),
+                summary.getClaimFreeYears(),
+                summary.getRecencyWeightedClaimScore(),
+                summary.getLastClaimDate(),
+                summary.getClaimSeverityLevel(),
+                summary.getSeniorityInsured(),
+                summary.getActivePolicyCount(),
+                summary.getCompletedPolicyCount(),
+                summary.getCalculatedAt(),
+                summary.getUpdatedAt()
         );
     }
 }

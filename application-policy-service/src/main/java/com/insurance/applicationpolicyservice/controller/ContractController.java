@@ -3,6 +3,9 @@ package com.insurance.applicationpolicyservice.controller;
 import com.insurance.applicationpolicyservice.dto.CreateContractRequest;
 import com.insurance.applicationpolicyservice.dto.ContractResponse;
 import com.insurance.applicationpolicyservice.dto.ClaimHistoryResponse;
+import com.insurance.applicationpolicyservice.dto.PayContractRequest;
+import com.insurance.applicationpolicyservice.dto.PolicyHistorySummaryLookupRequest;
+import com.insurance.applicationpolicyservice.dto.PolicyHistorySummaryResponse;
 import com.insurance.applicationpolicyservice.service.ContractService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,10 +32,13 @@ public class ContractController {
     }
 
     @PostMapping("/{contractId}/pay")
-    public ResponseEntity<ContractResponse> payContract(@PathVariable("contractId") UUID contractId) {
+    public ResponseEntity<ContractResponse> payContract(
+            @PathVariable("contractId") UUID contractId,
+            @RequestBody(required = false) PayContractRequest request) {
         String buyerUserIdStr = SecurityContextHolder.getContext().getAuthentication().getName();
         UUID buyerUserId = UUID.fromString(buyerUserIdStr);
-        ContractResponse response = contractService.payContract(buyerUserId, contractId);
+        String simulatePaymentResult = request == null ? null : request.simulatePaymentResult();
+        ContractResponse response = contractService.payContract(buyerUserId, contractId, simulatePaymentResult);
         return ResponseEntity.ok(response);
     }
 
@@ -55,6 +61,23 @@ public class ContractController {
         String buyerUserIdStr = SecurityContextHolder.getContext().getAuthentication().getName();
         UUID buyerUserId = UUID.fromString(buyerUserIdStr);
         List<ClaimHistoryResponse> response = contractService.getMyClaimHistory(buyerUserId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/policy-history/me")
+    public ResponseEntity<List<PolicyHistorySummaryResponse>> getMyPolicyHistorySummaries() {
+        String buyerUserIdStr = SecurityContextHolder.getContext().getAuthentication().getName();
+        UUID buyerUserId = UUID.fromString(buyerUserIdStr);
+        List<PolicyHistorySummaryResponse> response = contractService.getMyPolicyHistorySummaries(buyerUserId);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/policy-history/summaries")
+    public ResponseEntity<List<PolicyHistorySummaryResponse>> getPolicyHistorySummaries(
+            @RequestBody PolicyHistorySummaryLookupRequest request) {
+        List<PolicyHistorySummaryResponse> response = contractService.getPolicyHistorySummariesByInsuredPersonIds(
+                request == null ? List.of() : request.insuredPersonIds()
+        );
         return ResponseEntity.ok(response);
     }
 }

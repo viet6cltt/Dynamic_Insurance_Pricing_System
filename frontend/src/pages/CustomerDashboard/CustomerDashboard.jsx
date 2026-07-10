@@ -84,10 +84,13 @@ export default function CustomerDashboard() {
   const [contracts, setContracts] = useState([]);
   const [contractsLoading, setContractsLoading] = useState(true);
   const [contractsError, setContractsError] = useState("");
+  const [expandedContractIds, setExpandedContractIds] = useState(() => new Set());
 
   const [claims, setClaims] = useState([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [claimsError, setClaimsError] = useState("");
+  const [claimInsuredPersons, setClaimInsuredPersons] = useState([]);
+  const [selectedClaimInsuredPersonId, setSelectedClaimInsuredPersonId] = useState("ALL");
   
   // Notifications state
   const [notifications, setNotifications] = useState([]);
@@ -104,6 +107,65 @@ export default function CustomerDashboard() {
   // Interaction / Modal state
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState("");
+
+  const loadContractsWithQuotes = useCallback(async () => {
+    const contractsData = await customerService.getContracts();
+    const baseContracts = contractsData || [];
+
+    const enrichedContracts = await Promise.all(baseContracts.map(async (contract) => {
+      const [quoteResult, insuredResult, productResult, planResult] = await Promise.allSettled([
+        contract.quoteId ? customerService.getQuoteById(contract.quoteId) : Promise.resolve(null),
+        contract.insuredPersonId ? customerService.getInsuredPersonById(contract.insuredPersonId) : Promise.resolve(null),
+        contract.productId ? customerService.getProductById(contract.productId) : Promise.resolve(null),
+        contract.coveragePlanId ? customerService.getCoveragePlanById(contract.coveragePlanId) : Promise.resolve(null),
+      ]);
+
+      const enriched = {
+        ...contract,
+        quote: quoteResult.status === "fulfilled" ? quoteResult.value : null,
+        insuredPerson: insuredResult.status === "fulfilled" ? insuredResult.value : null,
+        product: productResult.status === "fulfilled" ? productResult.value : null,
+        coveragePlan: planResult.status === "fulfilled" ? planResult.value : null,
+      };
+
+      if (quoteResult.status === "rejected") {
+        console.error("Failed to load quote detail for contract", contract.contractId, quoteResult.reason);
+        enriched.quoteLoadError = true;
+      }
+      return enriched;
+    }));
+
+    return enrichedContracts;
+  }, []);
+
+  const toggleContractExpanded = (contractId) => {
+    setExpandedContractIds((current) => {
+      const next = new Set(current);
+      if (next.has(contractId)) next.delete(contractId);
+      else next.add(contractId);
+      return next;
+    });
+  };
+
+  const getContractProductName = (contract) => (
+    contract.product?.name || contract.quote?.productName || getProductDisplayName(contract.productType)
+  );
+
+  const getContractPlanName = (contract) => (
+    contract.coveragePlan?.planName || contract.quote?.planName || "Chưa có gói quyền lợi"
+  );
+
+  const getContractInsuredName = (contract) => (
+    contract.insuredPerson?.fullName || "Chưa tải được người được bảo hiểm"
+  );
+
+  const getRiskFactorLabel = (factor) => (
+    factor?.displayName || factor?.feature || factor?.factor || factor?.name || "Yếu tố rủi ro"
+  );
+
+  const getRiskFactorDetail = (factor) => (
+    factor?.readableReason || factor?.reason || factor?.impact || factor?.direction || ""
+  );
 
   const loadNotifications = useCallback(async ({ status = "", page = 1, size = 10 } = {}) => {
     setNotificationsLoading(true);
@@ -133,6 +195,16 @@ export default function CustomerDashboard() {
     }
   }, []);
 
+  const loadClaimInsuredPersons = useCallback(async () => {
+    try {
+      const response = await customerService.getMyInsuredPersons({ page: 0, size: 100 });
+      return response?.items || response?.content || response || [];
+    } catch (error) {
+      console.error("Failed to load insured persons for claim history", error);
+      return [];
+    }
+  }, []);
+
   // Fetch all initial data
   const fetchData = useCallback(async () => {
     try {
@@ -150,12 +222,17 @@ export default function CustomerDashboard() {
       setGender(profileData.gender || "MALE");
       setProfileLoading(false);
 
-      // 2. Get contracts
-      const contractsData = await customerService.getContracts();
-      setContracts(contractsData || []);
+      // 2. Get contracts and related pricing quotes
+      const contractsData = await loadContractsWithQuotes();
+      setContracts(contractsData);
       setContractsLoading(false);
 
-      const claimHistory = await customerService.getClaimHistory();
+      const insuredPeople = await loadClaimInsuredPersons();
+      setClaimInsuredPersons(insuredPeople);
+      const insuredPersonIds = insuredPeople.map((person) => person.insuredPersonId).filter(Boolean);
+      const claimHistory = insuredPersonIds.length > 0
+        ? await customerService.getPolicyHistorySummariesByInsuredPersonIds(insuredPersonIds)
+        : [];
       setClaims(claimHistory || []);
 
       // 3. Get notifications
@@ -167,7 +244,7 @@ export default function CustomerDashboard() {
       setProfileLoading(false);
       setContractsLoading(false);
     }
-  }, [loadNotifications]);
+  }, [loadNotifications, loadContractsWithQuotes, loadClaimInsuredPersons]);
 
   useEffect(() => {
     let alive = true;
@@ -225,17 +302,21 @@ export default function CustomerDashboard() {
     navigate("/login");
   };
 
-  const handlePayContract = async (contract) => {
+  const handlePayContract = async (contract, simulatePaymentResult = "SUCCESS") => {
     try {
       setPaymentLoading(true);
       setPaymentSuccessMsg("");
 
-      await customerService.payContract(contract.contractId);
-      setPaymentSuccessMsg(`Thanh toán hợp đồng ${getProductDisplayName(contract.productType)} thành công!`);
+      await customerService.payContract(contract.contractId, simulatePaymentResult);
+      setPaymentSuccessMsg(
+        simulatePaymentResult === "FAILED"
+          ? `Đã giả lập thanh toán thất bại cho hợp đồng ${getProductDisplayName(contract.productType)}.`
+          : `Thanh toán hợp đồng ${getProductDisplayName(contract.productType)} thành công!`
+      );
       
       // Reload contracts to reflect paid status
-      const updatedContracts = await customerService.getContracts();
-      setContracts(updatedContracts || []);
+      const updatedContracts = await loadContractsWithQuotes();
+      setContracts(updatedContracts);
     } catch (err) {
       console.error("Payment failed", err);
       alert("Thanh toán thất bại. Vui lòng thử lại.");
@@ -248,8 +329,8 @@ export default function CustomerDashboard() {
     try {
       setContractsLoading(true);
       setContractsError("");
-      const updatedContracts = await customerService.getContracts();
-      setContracts(updatedContracts || []);
+      const updatedContracts = await loadContractsWithQuotes();
+      setContracts(updatedContracts);
     } catch (err) {
       console.error("Failed to reload contracts", err);
       setContractsError("Không thể tải danh sách hợp đồng.");
@@ -262,7 +343,12 @@ export default function CustomerDashboard() {
     try {
       setClaimsLoading(true);
       setClaimsError("");
-      const claimHistory = await customerService.getClaimHistory();
+      const insuredPeople = await loadClaimInsuredPersons();
+      setClaimInsuredPersons(insuredPeople);
+      const insuredPersonIds = insuredPeople.map((person) => person.insuredPersonId).filter(Boolean);
+      const claimHistory = insuredPersonIds.length > 0
+        ? await customerService.getPolicyHistorySummariesByInsuredPersonIds(insuredPersonIds)
+        : [];
       setClaims(claimHistory || []);
     } catch (error) {
       console.error("Failed to reload claim history", error);
@@ -370,6 +456,22 @@ export default function CustomerDashboard() {
     return `${Number(value).toLocaleString("vi-VN")}đ`;
   };
 
+  const formatNumber = (value, digits = 2) => {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return "Chưa có";
+    return Number(value).toLocaleString("vi-VN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: digits
+    });
+  };
+
+  const formatPercent = (value) => {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return "Chưa có";
+    return `${(Number(value) * 100).toLocaleString("vi-VN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    })}%`;
+  };
+
   const formatDate = (value) => value || "Chưa hiệu lực";
 
   const formatDateTime = (value) => {
@@ -460,6 +562,34 @@ export default function CustomerDashboard() {
       : "bg-rose-50 text-rose-700 border-rose-100"
   );
 
+  const getRiskLevelLabel = (riskLevel) => {
+    switch ((riskLevel || "").toUpperCase()) {
+      case "LOW": return "Rủi ro thấp";
+      case "MEDIUM": return "Rủi ro trung bình";
+      case "HIGH": return "Rủi ro cao";
+      default: return riskLevel || "Chưa phân loại";
+    }
+  };
+
+  const getRiskLevelClass = (riskLevel) => {
+    switch ((riskLevel || "").toUpperCase()) {
+      case "LOW":
+        return "bg-emerald-50 text-emerald-700 border-emerald-100";
+      case "MEDIUM":
+        return "bg-amber-50 text-amber-700 border-amber-100";
+      case "HIGH":
+        return "bg-rose-50 text-rose-700 border-rose-100";
+      default:
+        return "bg-gray-100 text-gray-600 border-gray-200";
+    }
+  };
+
+  const getTopRiskFactors = (quote) => {
+    const factors = quote?.explanation?.topRiskFactors;
+    if (Array.isArray(factors)) return factors.slice(0, 3);
+    return [];
+  };
+
   const getSeverityLabel = (severity) => {
     switch ((severity || "").toUpperCase()) {
       case "LOW": return "Nhẹ";
@@ -482,14 +612,46 @@ export default function CustomerDashboard() {
     }
   };
 
+  const getClaimInsuredName = (insuredPersonId) => {
+    const person = claimInsuredPersons.find((item) => item.insuredPersonId === insuredPersonId);
+    return person?.fullName || "Người được bảo hiểm";
+  };
+
+  const claimInsuredOptions = [
+    ...claimInsuredPersons.map((person) => ({
+      insuredPersonId: person.insuredPersonId,
+      fullName: person.fullName,
+      identityNumber: person.identityNumber,
+    })),
+    ...claims
+      .filter((summary) => summary.insuredPersonId)
+      .filter((summary) => !claimInsuredPersons.some((person) => person.insuredPersonId === summary.insuredPersonId))
+      .map((summary) => ({
+        insuredPersonId: summary.insuredPersonId,
+        fullName: `Người được bảo hiểm ${summary.insuredPersonId.slice(0, 8)}`,
+        identityNumber: "",
+      }))
+  ].filter((item, index, arr) => (
+    item.insuredPersonId && arr.findIndex((candidate) => candidate.insuredPersonId === item.insuredPersonId) === index
+  ));
+
+  const selectedClaims = selectedClaimInsuredPersonId === "ALL"
+    ? claims
+    : claims.filter((summary) => summary.insuredPersonId === selectedClaimInsuredPersonId);
+
   // Helpers to calculate stats
   const activeContracts = contracts.filter(c => c.status === "ACTIVE" || c.status === "ISSUED");
   
   // Pending payment contract (usually status PENDING_PAYMENT or unpaid)
   const pendingPaymentContracts = contracts.filter(c => !isPaymentCompleted(c.paymentStatus) && c.status !== "ACTIVE");
   const totalUnpaidAmount = pendingPaymentContracts.reduce((sum, c) => sum + (c.quotedPremium || 0), 0);
-  const totalClaimAmount = claims.reduce((sum, claim) => sum + Number(claim.claimAmount || 0), 0);
-  const medicalServiceCount = claims.reduce((sum, claim) => sum + Number(claim.nMedicalServices || 0), 0);
+  const previousYearClaimCost = selectedClaims.reduce((sum, summary) => sum + Number(summary.prevCostClaimsYear || 0), 0);
+  const medicalServiceCount = selectedClaims.reduce((sum, summary) => sum + Number(summary.prevNMedicalServices || 0), 0);
+  const getPreviousAverageSeverity = (summary) => {
+    const services = Number(summary.prevNMedicalServices || 0);
+    if (services <= 0) return 0;
+    return Number(summary.prevCostClaimsYear || 0) / services;
+  };
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex text-gray-800 font-sans">
@@ -841,12 +1003,10 @@ export default function CustomerDashboard() {
                         </div>
 
                         <button
-                          onClick={() => handlePayContract(pendingPaymentContracts[0])}
-                          disabled={paymentLoading}
-                          className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-all shadow-sm flex items-center justify-center space-x-2"
+                          onClick={() => handleTabChange("payments")}
+                          className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm flex items-center justify-center space-x-2"
                         >
-                          {paymentLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                          <span>Thanh toán ngay</span>
+                          <span>Đi tới thanh toán</span>
                         </button>
                       </div>
                     )}
@@ -981,68 +1141,178 @@ export default function CustomerDashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    {contracts.map((c) => (
-                      <div key={c.contractId} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${getProductIconBg(c.productType)}`}>
-                              {getProductIcon(c.productType)}
+                  <div className="grid grid-cols-1 gap-4">
+                    {contracts.map((c) => {
+                      const isExpanded = expandedContractIds.has(c.contractId);
+                      const topRiskFactors = getTopRiskFactors(c.quote);
+                      return (
+                        <div key={c.contractId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => toggleContractExpanded(c.contractId)}
+                            className="w-full p-5 text-left hover:bg-gray-50/60 transition-colors"
+                          >
+                            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                              <div className="flex items-start gap-3 min-w-0">
+                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${getProductIconBg(c.productType)}`}>
+                                  {getProductIcon(c.productType)}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h4 className="font-bold text-gray-900">{getContractProductName(c)}</h4>
+                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-semibold ${getContractStatusClass(c.status)}`}>
+                                      {getContractStatusLabel(c.status)}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-600 mt-1">
+                                    {getContractInsuredName(c)} · {getContractPlanName(c)}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${getPaymentStatusClass(c.paymentStatus)}`}>
+                                      <ReceiptText className="w-3.5 h-3.5" />
+                                      {getPaymentStatusLabel(c.paymentStatus)}
+                                    </span>
+                                    {c.quote?.riskLevel && (
+                                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-semibold ${getRiskLevelClass(c.quote.riskLevel)}`}>
+                                        {getRiskLevelLabel(c.quote.riskLevel)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 lg:min-w-[420px]">
+                                <div className="rounded-xl bg-gray-50 p-3">
+                                  <p className="text-xs text-gray-500">Phí cuối</p>
+                                  <p className="font-extrabold text-gray-900 mt-1">{formatMoney(c.quotedPremium)}</p>
+                                </div>
+                                <div className="rounded-xl bg-gray-50 p-3">
+                                  <p className="text-xs text-gray-500">Số tiền BH</p>
+                                  <p className="font-extrabold text-gray-900 mt-1">{formatMoney(c.sumInsured)}</p>
+                                </div>
+                                <div className="rounded-xl bg-gray-50 p-3 col-span-2 sm:col-span-1">
+                                  <p className="text-xs text-gray-500">Thời hạn</p>
+                                  <p className="font-bold text-gray-900 mt-1">{formatDate(c.effectiveDate)} - {formatDate(c.expiryDate)}</p>
+                                </div>
+                              </div>
+
+                              <ChevronRight className={`w-5 h-5 text-gray-400 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                             </div>
-                            <div className="min-w-0">
-                              <h4 className="font-bold text-gray-900 truncate">{getProductDisplayName(c.productType)}</h4>
-                              <p className="text-xs font-mono text-gray-400 mt-1 break-all">HĐ {c.contractId}</p>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="border-t border-gray-100 p-5 space-y-4">
+                              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Activity className="w-4 h-4 text-blue-600 shrink-0" />
+                                    <p className="text-sm font-bold text-gray-900">Yếu tố rủi ro nổi bật</p>
+                                  </div>
+                                  {c.quote?.riskLevel && (
+                                    <span className={`shrink-0 inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-semibold ${getRiskLevelClass(c.quote.riskLevel)}`}>
+                                      {getRiskLevelLabel(c.quote.riskLevel)}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {c.quoteLoadError ? (
+                                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                                    Không tải được chi tiết rủi ro cho hợp đồng này.
+                                  </p>
+                                ) : topRiskFactors.length > 0 ? (
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    {topRiskFactors.map((factor, index) => (
+                                      <div key={`${getRiskFactorLabel(factor)}-${index}`} className="rounded-xl bg-white border border-blue-100 p-3">
+                                        <p className="text-sm font-bold text-gray-900">{getRiskFactorLabel(factor)}</p>
+                                        {getRiskFactorDetail(factor) && (
+                                          <p className="text-xs text-gray-500 mt-1 leading-relaxed">{getRiskFactorDetail(factor)}</p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-500">Chưa có dữ liệu giải thích rủi ro nổi bật cho báo giá này.</p>
+                                )}
+                              </div>
+
+                              <div className="rounded-xl border border-gray-100 p-4">
+                                <p className="text-sm font-bold text-gray-900 mb-3">Thông tin liên quan</p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                  <div>
+                                    <p className="text-xs text-gray-500">Người được bảo hiểm</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{getContractInsuredName(c)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Sản phẩm</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{getContractProductName(c)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Gói quyền lợi</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{getContractPlanName(c)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Quyền lợi hoàn trả</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{c.reimbursement || "Chưa có"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Kênh phân phối</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{c.distributionChannel || "Chưa có"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Năm hợp đồng</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{c.policyYear || 1}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-gray-100 p-4">
+                                <p className="text-sm font-bold text-gray-900 mb-3">Chi tiết định phí</p>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                  <div>
+                                    <p className="text-xs text-gray-500">Pure premium</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{formatMoney(c.quote?.purePremium ?? c.purePremium)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Loading rate</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{formatPercent(c.quote?.loadingRate ?? c.loadingRate)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Tần suất dự đoán/năm</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{formatNumber(c.quote?.predictedAnnualFrequency, 4)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500">Severity dự đoán</p>
+                                    <p className="font-semibold text-gray-900 mt-1">{formatMoney(c.quote?.predictedAverageSeverity)}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${getPaymentStatusClass(c.paymentStatus)}`}>
+                                    <ReceiptText className="w-3.5 h-3.5" />
+                                    {getPaymentStatusLabel(c.paymentStatus)}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-600 text-xs font-semibold">
+                                    <CalendarDays className="w-3.5 h-3.5" />
+                                    {formatDate(c.effectiveDate)} - {formatDate(c.expiryDate)}
+                                  </span>
+                                </div>
+
+                                {!isPaymentCompleted(c.paymentStatus) && c.status !== "ACTIVE" && (
+                                  <button
+                                    onClick={() => handleTabChange("payments")}
+                                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-colors"
+                                  >
+                                    <span>Đi tới thanh toán</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          <span className={`shrink-0 inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-semibold ${getContractStatusClass(c.status)}`}>
-                            {getContractStatusLabel(c.status)}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div className="rounded-xl bg-gray-50 p-3">
-                            <p className="text-xs text-gray-500">Phí thường niên</p>
-                            <p className="font-extrabold text-gray-900 mt-1">{formatMoney(c.quotedPremium)}</p>
-                          </div>
-                          <div className="rounded-xl bg-gray-50 p-3">
-                            <p className="text-xs text-gray-500">Số tiền bảo hiểm</p>
-                            <p className="font-extrabold text-gray-900 mt-1">{formatMoney(c.sumInsured)}</p>
-                          </div>
-                          <div className="rounded-xl bg-gray-50 p-3">
-                            <p className="text-xs text-gray-500">Ngày hiệu lực</p>
-                            <p className="font-bold text-gray-900 mt-1">{formatDate(c.effectiveDate)}</p>
-                          </div>
-                          <div className="rounded-xl bg-gray-50 p-3">
-                            <p className="text-xs text-gray-500">Ngày kết thúc</p>
-                            <p className="font-bold text-gray-900 mt-1">{formatDate(c.expiryDate)}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${getPaymentStatusClass(c.paymentStatus)}`}>
-                              <ReceiptText className="w-3.5 h-3.5" />
-                              {getPaymentStatusLabel(c.paymentStatus)}
-                            </span>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-600 text-xs font-semibold">
-                              <CalendarDays className="w-3.5 h-3.5" />
-                              Năm hợp đồng {c.policyYear || 1}
-                            </span>
-                          </div>
-
-                          {!isPaymentCompleted(c.paymentStatus) && c.status !== "ACTIVE" && (
-                            <button
-                              onClick={() => handlePayContract(c)}
-                              disabled={paymentLoading}
-                              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-colors"
-                            >
-                              {paymentLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                              <span>Thanh toán phí</span>
-                            </button>
                           )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1056,7 +1326,7 @@ export default function CustomerDashboard() {
             <ProductsTab
               onRegisterSuccess={() => {
                 // Reload contracts after successful registration
-                customerService.getContracts().then(data => setContracts(data || []));
+                loadContractsWithQuotes().then(data => setContracts(data || []));
               }}
             />
           )}
@@ -1077,6 +1347,54 @@ export default function CustomerDashboard() {
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Lịch sử giao dịch thanh toán</h3>
                 <p className="text-xs text-gray-500">Danh sách các hóa đơn đóng phí bảo hiểm thường niên của quý khách</p>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-gray-800">Hợp đồng chờ thanh toán</h4>
+                {pendingPaymentContracts.length === 0 ? (
+                  <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-6 text-center text-sm text-gray-400">
+                    Không có hợp đồng nào đang chờ thanh toán.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {pendingPaymentContracts.map((c) => (
+                      <div key={c.contractId} className="rounded-2xl border border-gray-100 p-4 space-y-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-gray-900">{getProductDisplayName(c.productType)}</p>
+                            <p className="text-xs text-gray-400 mt-1">Số HĐ: {c.contractId?.substring(0, 13).toUpperCase()}</p>
+                          </div>
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${getPaymentStatusClass(c.paymentStatus)}`}>
+                            <ReceiptText className="w-3.5 h-3.5" />
+                            {getPaymentStatusLabel(c.paymentStatus)}
+                          </span>
+                        </div>
+                        <div className="flex items-baseline justify-between border-t border-dashed border-gray-100 pt-3">
+                          <span className="text-xs text-gray-400">Số tiền</span>
+                          <span className="text-lg font-extrabold text-gray-900">{(c.quotedPremium || 0).toLocaleString("vi-VN")}đ</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handlePayContract(c, "SUCCESS")}
+                            disabled={paymentLoading}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:bg-emerald-300"
+                          >
+                            {paymentLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                            <span>Giả lập thành công</span>
+                          </button>
+                          <button
+                            onClick={() => handlePayContract(c, "FAILED")}
+                            disabled={paymentLoading}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:bg-red-300"
+                          >
+                            {paymentLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                            <span>Giả lập thất bại</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {contracts.filter(c => isPaymentCompleted(c.paymentStatus)).length === 0 ? (
@@ -1130,16 +1448,30 @@ export default function CustomerDashboard() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-2xl font-bold text-gray-900">Lịch sử bồi thường</h3>
-                  <p className="text-sm text-gray-500 mt-1">Theo dõi các hồ sơ claim và lịch sử sử dụng dịch vụ y tế đã ghi nhận.</p>
+                  <p className="text-sm text-gray-500 mt-1">Theo dõi tổng hợp lịch sử bồi thường theo từng người được bảo hiểm.</p>
                 </div>
-                <button
-                  onClick={reloadClaims}
-                  disabled={claimsLoading}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
-                >
-                  <RefreshCw className={`w-4 h-4 ${claimsLoading ? "animate-spin" : ""}`} />
-                  <span>Làm mới</span>
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    value={selectedClaimInsuredPersonId}
+                    onChange={(event) => setSelectedClaimInsuredPersonId(event.target.value)}
+                    className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="ALL">Tất cả người được bảo hiểm</option>
+                    {claimInsuredOptions.map((person) => (
+                      <option key={person.insuredPersonId} value={person.insuredPersonId}>
+                        {person.fullName}{person.identityNumber ? ` - ${person.identityNumber}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={reloadClaims}
+                    disabled={claimsLoading}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${claimsLoading ? "animate-spin" : ""}`} />
+                    <span>Làm mới</span>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1147,21 +1479,21 @@ export default function CustomerDashboard() {
                   <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                     <ClipboardList className="w-5 h-5" />
                   </div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Tổng hồ sơ</p>
-                  <p className="text-3xl font-extrabold text-gray-900 mt-2">{claims.length}</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Dòng input AI</p>
+                  <p className="text-3xl font-extrabold text-gray-900 mt-2">{selectedClaims.length}</p>
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                   <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
                     <ReceiptText className="w-5 h-5" />
                   </div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Tổng tiền bồi thường</p>
-                  <p className="text-2xl font-extrabold text-gray-900 mt-2">{formatMoney(totalClaimAmount)}</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Chi phí BT năm trước</p>
+                  <p className="text-2xl font-extrabold text-gray-900 mt-2">{formatMoney(previousYearClaimCost)}</p>
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                   <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                     <Activity className="w-5 h-5" />
                   </div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Lượt dịch vụ y tế</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4">Dịch vụ y tế năm trước</p>
                   <p className="text-3xl font-extrabold text-gray-900 mt-2">{medicalServiceCount}</p>
                 </div>
               </div>
@@ -1177,14 +1509,22 @@ export default function CustomerDashboard() {
                 {claimsLoading ? (
                   <div className="flex flex-col justify-center items-center py-20">
                     <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                    <span className="text-sm text-gray-400 mt-3">Đang tải lịch sử bồi thường...</span>
+                      <span className="text-sm text-gray-400 mt-3">Đang tải tổng hợp lịch sử bồi thường...</span>
                   </div>
                 ) : claims.length === 0 ? (
                   <div className="py-20 text-center text-gray-400 space-y-3">
                     <ClipboardList className="w-12 h-12 mx-auto text-gray-300" />
                     <div>
-                      <h4 className="text-base font-bold text-gray-700">Chưa có claim nào</h4>
-                      <p className="text-sm mt-1">Khi phát sinh bồi thường hoặc sử dụng dịch vụ, dữ liệu sẽ xuất hiện tại đây.</p>
+                      <h4 className="text-base font-bold text-gray-700">Chưa có dữ liệu lịch sử</h4>
+                      <p className="text-sm mt-1">Khi có dữ liệu tổng hợp theo người được bảo hiểm, thông tin sẽ xuất hiện tại đây.</p>
+                    </div>
+                  </div>
+                ) : selectedClaims.length === 0 ? (
+                  <div className="py-20 text-center text-gray-400 space-y-3">
+                    <User className="w-12 h-12 mx-auto text-gray-300" />
+                    <div>
+                      <h4 className="text-base font-bold text-gray-700">Người này chưa có lịch sử bồi thường</h4>
+                      <p className="text-sm mt-1">Chọn người được bảo hiểm khác hoặc chọn tất cả để xem toàn bộ lịch sử.</p>
                     </div>
                   </div>
                 ) : (
@@ -1192,37 +1532,51 @@ export default function CustomerDashboard() {
                     <table className="w-full border-collapse text-left text-sm">
                       <thead>
                         <tr className="border-b border-gray-100 text-gray-400 font-semibold text-xs uppercase bg-gray-50/50">
-                          <th className="py-4 px-6">Ngày phát sinh</th>
+                          <th className="py-4 px-6">Người được bảo hiểm</th>
                           <th className="py-4 px-6">Sản phẩm</th>
-                          <th className="py-4 px-6">Số tiền</th>
-                          <th className="py-4 px-6">Dịch vụ</th>
-                          <th className="py-4 px-6">Mức độ</th>
-                          <th className="py-4 px-6">Nguồn</th>
-                          <th className="py-4 px-6">Mã hồ sơ</th>
+                          <th className="py-4 px-6">Thâm niên</th>
+                          <th className="py-4 px-6">Năm không BT</th>
+                          <th className="py-4 px-6">BT năm trước</th>
+                          <th className="py-4 px-6">Dịch vụ năm trước</th>
+                          <th className="py-4 px-6">Severity TB năm trước</th>
+                          <th className="py-4 px-6">Có BT/dịch vụ</th>
+                          <th className="py-4 px-6">Không BT năm trước</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {claims.map((claim) => (
-                          <tr key={claim.recordId} className="hover:bg-gray-50/40 transition-colors">
-                            <td className="py-4 px-6 font-bold text-gray-900">{claim.experienceDate || "N/A"}</td>
+                        {selectedClaims.map((summary) => (
+                          <tr key={summary.summaryId || `${summary.insuredPersonId}-${summary.productType}`} className="hover:bg-gray-50/40 transition-colors">
+                            <td className="py-4 px-6">
+                              <p className="font-bold text-gray-900">{getClaimInsuredName(summary.insuredPersonId)}</p>
+                              <p className="font-mono text-[10px] text-gray-400 mt-1">{summary.insuredPersonId}</p>
+                            </td>
                             <td className="py-4 px-6">
                               <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
-                                {getProductDisplayName(claim.productType)}
+                                {getProductDisplayName(summary.productType)}
                               </span>
                             </td>
-                            <td className="py-4 px-6 font-extrabold text-rose-600">{formatMoney(claim.claimAmount)}</td>
-                            <td className="py-4 px-6 text-gray-700 font-semibold">{claim.nMedicalServices || 0}</td>
+                            <td className="py-4 px-6 text-gray-700 font-semibold">{formatNumber(summary.seniorityInsured, 2)}</td>
+                            <td className="py-4 px-6 text-gray-700 font-semibold">{summary.claimFreeYears ?? 0}</td>
+                            <td className="py-4 px-6 font-semibold text-gray-800">{formatMoney(summary.prevCostClaimsYear)}</td>
+                            <td className="py-4 px-6 text-gray-700 font-semibold">{summary.prevNMedicalServices || 0}</td>
+                            <td className="py-4 px-6 font-semibold text-gray-800">{formatMoney(getPreviousAverageSeverity(summary))}</td>
                             <td className="py-4 px-6">
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold ${getSeverityClass(claim.severityLevel)}`}>
-                                {getSeverityLabel(claim.severityLevel)}
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold ${
+                                summary.prevHadClaimOrService
+                                  ? "bg-rose-50 text-rose-700 border-rose-100"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                              }`}>
+                                {summary.prevHadClaimOrService ? "Có" : "Không"}
                               </span>
                             </td>
-                            <td className="py-4 px-6 text-gray-600">{claim.source || "SYSTEM"}</td>
                             <td className="py-4 px-6">
-                              <p className="font-mono text-xs text-gray-500">{claim.recordId}</p>
-                              {claim.contractId && (
-                                <p className="font-mono text-[10px] text-gray-400 mt-1">HĐ {claim.contractId}</p>
-                              )}
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold ${
+                                summary.claimFreePreviousYear
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                  : "bg-rose-50 text-rose-700 border-rose-100"
+                              }`}>
+                                {summary.claimFreePreviousYear ? "Có" : "Không"}
+                              </span>
                             </td>
                           </tr>
                         ))}

@@ -51,13 +51,22 @@ export AWS_SECRET_ACCESS_KEY=minioadminpassword
 Then run a training script with MLflow enabled:
 
 ```bash
-python3 ml/scripts/train_portfolio_expected_cost_model.py --mlflow
-python3 ml/scripts/train_health_risk_modifier_model.py --mlflow
+python3 ml/scripts/train_frequency_model.py --mlflow
+python3 ml/scripts/train_severity_model.py --mlflow
 ```
 
-Each script registers every trained candidate model as its own model version.
-The best candidate by holdout RMSE is marked with model-version tag
-`stage=Production` and registered-model alias `Production`.
+The current pricing flow uses two registered models:
+
+- `FrequencyModel`
+- `SeverityModel`
+
+With `--mlflow`, the scripts upload runs, metrics, reports, metadata and model
+artifacts to MLflow Tracking, then create model versions in the MLflow Model
+Registry. The generated CSV files remain local training/reference inputs; they
+are not uploaded as dataset artifacts by default.
+
+By default, training uses `--deployment-mode candidate`, so candidates are
+registered for review without changing production aliases.
 
 ## Stop
 

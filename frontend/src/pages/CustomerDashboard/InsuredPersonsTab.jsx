@@ -23,6 +23,23 @@ function relationshipLabel(value) {
   return map[value] || value || "Người thân";
 }
 
+function normalizeInsuredForm(form) {
+  return {
+    ...form,
+    fullName: form.fullName.trim(),
+    identityNumber: form.identityNumber.trim(),
+    dateOfBirth: form.dateOfBirth || null,
+    linkedUserProfileId: null,
+  };
+}
+
+function validateInsuredForm(form) {
+  if (!form.fullName.trim()) return "Vui lòng nhập họ tên người được bảo hiểm.";
+  if (!form.dateOfBirth) return "Vui lòng nhập ngày sinh.";
+  if (!form.identityNumber.trim()) return "Vui lòng nhập CCCD/CMND.";
+  return "";
+}
+
 export default function InsuredPersonsTab() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -94,13 +111,14 @@ export default function InsuredPersonsTab() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const validationMessage = validateInsuredForm(form);
+    if (validationMessage) {
+      showToast(validationMessage, true);
+      return;
+    }
     setSubmitting(true);
     try {
-      const payload = {
-        ...form,
-        dateOfBirth: form.dateOfBirth || null,
-        linkedUserProfileId: null,
-      };
+      const payload = normalizeInsuredForm(form);
       if (editingPerson) {
         await customerService.updateInsuredPerson(editingPerson.insuredPersonId, payload);
         showToast("Đã cập nhật người được bảo hiểm.");
@@ -301,10 +319,14 @@ export default function InsuredPersonsTab() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">CCCD/CMND</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">CCCD/CMND <span className="text-red-500">*</span></label>
                 <input
+                  required
                   value={form.identityNumber}
-                  onChange={(event) => setForm({ ...form, identityNumber: event.target.value })}
+                  onChange={(event) => setForm({ ...form, identityNumber: event.target.value.trimStart() })}
+                  placeholder="Nhập số CCCD/CMND"
+                  inputMode="numeric"
+                  autoComplete="off"
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

@@ -276,6 +276,7 @@ public class PricingQuoteService {
                 .coveragePlanId(request.coveragePlanId())
                 .productType(coveragePlan.productType())
                 .planName(coveragePlan.planName())
+                .reimbursement(aiReimbursement)
                 .sumInsured(coveragePlan.sumInsured())
                 .predictedFrequency(predictedFrequency)
                 .predictedSeverity(predictedSeverity)
@@ -443,7 +444,7 @@ public class PricingQuoteService {
     public ValidateQuoteResponse validateQuote(UUID quoteId, ValidateQuoteRequest request) {
         PremiumQuote quote = quoteRepository.findById(quoteId).orElse(null);
         if (quote == null) {
-            return new ValidateQuoteResponse(false, quoteId, null, null, null, null, null, null, null, "NOT_FOUND",
+            return new ValidateQuoteResponse(false, quoteId, null, null, null, null, null, null, null, null, "NOT_FOUND",
                     null);
         }
 
@@ -474,6 +475,7 @@ public class PricingQuoteService {
                 quote.getInsuredPersonId(),
                 quote.getProductId(),
                 quote.getCoveragePlanId(),
+                quote.getReimbursement(),
                 quote.getPurePremium(),
                 quote.getLoadingRate(),
                 quote.getFinalPremium(),
@@ -702,6 +704,7 @@ public class PricingQuoteService {
                 q.getCoveragePlanId(),
                 q.getProductType(),
                 q.getPlanName(),
+                q.getReimbursement(),
                 q.getSumInsured(),
                 q.getPredictedFrequency(),
                 q.getPredictedSeverity(),

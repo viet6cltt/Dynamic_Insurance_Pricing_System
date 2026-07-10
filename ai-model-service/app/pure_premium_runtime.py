@@ -71,14 +71,17 @@ EXPLANATION_FEATURES = [
     "pre_existing_condition",
     "exercise_frequency",
     "occupation_risk",
+    "seniority_insured",
     "prev_claim_count",
     "prev_claim_cost",
+    "prev_average_claim_severity",
+    "prev_had_claim",
     "claim_free_years",
+    "claim_free_previous_year",
     "type_product",
     "type_policy",
     "reimbursement",
     "new_business",
-    "distribution_channel",
 ]
 
 
@@ -250,6 +253,7 @@ class PurePremiumRuntime:
         seniority_insured = getattr(portfolio, "seniorityInsured", 0.0) if portfolio else 0.0
         prev_n_med = getattr(portfolio, "prevNMedicalServices", 0.0) if portfolio else 0.0
         prev_cost = getattr(portfolio, "prevCostClaimsYear", 0.0) if portfolio else 0.0
+        prev_claim_count = getattr(history, "pastClaimCount", 0.0) if history else 0.0
 
         prev_avg_sev = 0.0
         if prev_n_med > 0:
@@ -262,7 +266,7 @@ class PurePremiumRuntime:
             "seniority_policy": seniority_insured,
             "bmi": risk.bmi,
             "blood_pressure": risk.bloodPressure,
-            "prev_claim_count": prev_n_med,
+            "prev_claim_count": prev_claim_count,
             "prev_claim_cost": prev_cost,
             "claim_free_years": claim_free_years,
             "years_with_history": seniority_insured,
